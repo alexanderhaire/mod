@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Clipboard Paste Capture</title>
+  <style>
+    :root {
+      --border: #c8ccda;
+      --border-strong: #4b83f5;
+      --bg: #f8f9fb;
+      --text: #2f3340;
+      --subtle: #5f6471;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background: transparent;
+    }
+    body.compact {
+      height: 1px;
+      overflow: hidden;
+    }
+    .zone {
+      border: 1px dashed var(--border);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 12px 14px;
+      min-height: 56px;
+      outline: none;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .zone:focus {
+      border-color: var(--border-strong);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+    .status {
+      font-size: 12px;
+      color: var(--subtle);
+      margin-top: 6px;
+    }
+    body.compact .zone,
+    body.compact .status {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="zone" class="zone" tabindex="0">Paste screenshots anywhere in this form with Ctrl/Cmd+V.</div>
+  <div id="status" class="status">No clipboard image yet.</div>
+
+  <script>
+    const MAX_IMAGES = 5;
+    const MAX_BYTES = 5 * 1024 * 1024;
+
+    // Lightweight Streamlit bridge so the component works without the CDN bundle.
+    function createStreamlitBridge() {
+      const RENDER_EVENT = "streamlit:render";
+      const events = new EventTarget();
+      let registered = false;
+      let lastHeight = null;
+
+      const sendMessage = (type, data) => {
+        window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*");
+      };
+
+      const onMessageEvent = (event) => {
+        const data = event?.data;
+        if (!data || data.type !== RENDER_EVENT) {
+          return;
+        }
+
+        const detail = {
+          args: data.args || {},
+          disabled: Boolean(data.disabled),
+          theme: data.theme,
+        };
+        events.dispatchEvent(new CustomEvent(RENDER_EVENT, { detail }));
+      };
+
+      return {
+        RENDER_EVENT,
+        events,
+        setComponentReady: () => {
+          if (!registered) {
+            window.addEventListener("message", onMessageEvent);
+            registered = true;
+          }
+          sendMessage("streamlit:componentReady", { apiVersion: 1 });
+        },
+        setFrameHeight: (height) => {
+          const nextHeight = height ?? document.body.scrollHeight;
+          if (nextHeight === lastHeight) {
+            return;
+          }
+          lastHeight = nextHeight;
+          sendMessage("streamlit:setFrameHeight", { height: nextHeight });
+        },
+        setComponentValue: (value) => sendMessage("streamlit:setComponentValue", { value, dataType: "json" }),
+      };
+    }
+
+    const Streamlit = window.Streamlit ?? createStreamlitBridge();
+    const zone = document.getElementById("zone");
+    const status = document.getElementById("status");
+    let images = [];
+    let compactMode = false;
+    let pasteListenerTarget = null;
+
+    function setHeight() {
+      const targetHeight = compactMode ? 1 : document.body.scrollHeight;
+      Streamlit.setFrameHeight(targetHeight);
+    }
+
+    function publish() {
+      Streamlit.setComponentValue({ images });
+      setHeight();
+    }
+
+    function resetText() {
+      zone.textContent = "Paste screenshots anywhere in this form with Ctrl/Cmd+V.";
+      status.textContent = "No clipboard image yet.";
+    }
+
+    function readAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handlePaste(event) {
+      const items = Array.from(event.clipboardData?.items || []);
+      const newImages = [];
+
+      for (const item of items) {
+        if (!item.type || !item.type.startsWith("image/")) {
+          continue;
+        }
+
+        const file = item.getAsFile();
+        if (!file) {
+          continue;
+        }
+
+        if (file.size > MAX_BYTES) {
+          status.textContent = "Skipped an image larger than 5 MB.";
+          continue;
+        }
+
+        try {
+          const dataUrl = await readAsDataURL(file);
+          const safeName = file.name && file.name.trim() ? file.name : `pasted_${Date.now()}.png`;
+          newImages.push({ data_url: dataUrl, type: item.type, name: safeName });
+        } catch (err) {
+          status.textContent = "Could not read a pasted image.";
+        }
+      }
+
+      if (!newImages.length) {
+        return;
+      }
+
+      event.preventDefault();
+      const spaceLeft = Math.max(0, MAX_IMAGES - images.length);
+      if (spaceLeft <= 0) {
+        status.textContent = `Maximum of ${MAX_IMAGES} screenshots reached. Press Backspace to clear.`;
+        return;
+      }
+
+      const accepted = newImages.slice(0, spaceLeft);
+      images = images.concat(accepted);
+
+      const total = images.length;
+      status.textContent = `${total} screenshot${total === 1 ? "" : "s"} ready to attach.`;
+      zone.textContent = "Paste again to add another screenshot. Press Backspace to clear.";
+      publish();
+    }
+
+    function clearImages() {
+      images = [];
+      resetText();
+      publish();
+    }
+
+    function setPasteTargets(args) {
+      if (zone && !zone.dataset.pasteBound) {
+        zone.addEventListener("paste", (event) => handlePaste(event));
+        zone.dataset.pasteBound = "true";
+      }
+
+      let target = null;
+      let attachedToParent = false;
+      try {
+        if (!args || args.global !== false) {
+          if (window.parent && window.parent.document) {
+            target = window.parent.document;
+          }
+        }
+      } catch (err) {
+        target = null;
+      }
+
+      if (pasteListenerTarget && pasteListenerTarget !== target && typeof pasteListenerTarget.removeEventListener === "function") {
+        pasteListenerTarget.removeEventListener("paste", handlePaste, true);
+        pasteListenerTarget = null;
+      }
+
+      if (target && typeof target.addEventListener === "function") {
+        if (pasteListenerTarget !== target) {
+          target.addEventListener("paste", handlePaste, true);
+          pasteListenerTarget = target;
+        }
+        attachedToParent = true;
+      } else {
+        pasteListenerTarget = null;
+      }
+
+      return attachedToParent;
+    }
+
+    function applyArgs(args) {
+      compactMode = !!(args && args.compact);
+      document.body.classList.toggle("compact", compactMode);
+      const hasGlobalPaste = setPasteTargets(args);
+      if (compactMode && !hasGlobalPaste) {
+        compactMode = false;
+        document.body.classList.remove("compact");
+      }
+      if (args && args.reset) {
+        clearImages();
+      } else {
+        setHeight();
+      }
+    }
+
+    function bootstrap() {
+      zone.addEventListener("click", () => zone.focus());
+      zone.addEventListener("keydown", (event) => {
+        if (event.key === "Backspace") {
+          clearImages();
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && images.length) {
+          clearImages();
+        }
+      });
+
+      setPasteTargets();
+
+      if (Streamlit && Streamlit.events && Streamlit.RENDER_EVENT) {
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, (event) => {
+          applyArgs(event.detail.args);
+        });
+        Streamlit.setComponentReady();
+        publish();
+      } else {
+        // Fallback: still allow pasting even if Streamlit bridge is missing.
+        resetText();
+      }
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>
