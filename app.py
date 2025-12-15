@@ -891,6 +891,27 @@ def _fetch_market_data(cursor: pyodbc.Cursor) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _add_margin_metrics(df: pd.DataFrame) -> pd.DataFrame:
+    """Add dollar and percent margin columns comparing standard vs current cost."""
+    if df is None or df.empty:
+        return df
+
+    df = df.copy()
+    std_cost = pd.to_numeric(df.get("STNDCOST"), errors="coerce")
+    cur_cost = pd.to_numeric(df.get("CURRCOST"), errors="coerce")
+
+    df["STNDCOST"] = std_cost
+    df["CURRCOST"] = cur_cost
+    df["Margin"] = (std_cost - cur_cost).fillna(0)
+    df["MarginPct"] = (
+        df["Margin"]
+        .div(std_cost.replace({0: pd.NA}))
+        .mul(100)
+        .fillna(0)
+    )
+    return df
+
+
 def _buy_calendar_cache_key(df_priority: pd.DataFrame, today: datetime.date) -> str:
     """Generate a stable cache key for the buy calendar so chat reruns do not rebuild it unnecessarily."""
     if df_priority.empty:
@@ -1029,7 +1050,7 @@ try:
             st.stop()
         
         # Fetch market data (needed for both pages)
-        df_market = _fetch_market_data(cursor)
+        df_market = _add_margin_metrics(_fetch_market_data(cursor))
         
         # === PAGE ROUTING ===
         # GENERATIVE INSIGHTS PAGE
@@ -1096,11 +1117,12 @@ try:
                 source_df = df_ticker if not df_ticker.empty else df_market
                 
                 for _, row in source_df.head(10).iterrows():
-                    price_change = float(row.get('PriceChange', 0) or 0)
-                    pct_change = float(row.get('PctChange', 0) or 0)
                     curr_cost = float(row.get('CURRCOST', 0) or 0)
-                    symbol = "▲" if price_change >= 0 else "▼"
-                    ticker_items.append(f"{row.get('ITEMNMBR', '???')} {curr_cost:.2f} {symbol}{abs(pct_change):.1f}%")
+                    margin = float(row.get('Margin', 0) or 0)
+                    margin_pct = float(row.get('MarginPct', 0) or 0)
+                    ticker_items.append(
+                        f"{row.get('ITEMNMBR', '???')} ${curr_cost:.2f} margin {margin:+.2f} ({margin_pct:+.1f}%)"
+                    )
                 ticker_html = f"""
                 <div class="ticker-wrap">
                     <div class="ticker">
@@ -1273,6 +1295,7 @@ try:
                             search_columns = [column[0] for column in cursor.description]
                             search_data = cursor.fetchall()
                             search_df = pd.DataFrame.from_records(search_data, columns=search_columns)
+                            search_df = _add_margin_metrics(search_df)
                             
                             if not search_df.empty:
                                 # Add segment classification
@@ -1305,17 +1328,13 @@ try:
                             h1.markdown("**ITEM**")
                             h2.markdown("**DESCRIPTION**")
                             h3.markdown("**COST**")
-                            h4.markdown("**CHANGE**")
+                            h4.markdown("**MARGIN**")
                             st.markdown("---")
                             
-                            # Sort by % change: highest absolute change first, zeros at the bottom
+                            # Sort by margin dollars: highest margin first
                             filtered_df = filtered_df.copy()
-                            filtered_df['AbsPctChange'] = filtered_df['PctChange'].abs()
-                            filtered_df['IsZero'] = (filtered_df['PctChange'] == 0) | (filtered_df['PctChange'].isna())
-                            filtered_df = filtered_df.sort_values(
-                                by=['IsZero', 'AbsPctChange'], 
-                                ascending=[True, False]  # Non-zeros first (IsZero=False), then by highest absolute change
-                            )
+                            filtered_df['Margin'] = pd.to_numeric(filtered_df.get('Margin'), errors='coerce').fillna(0)
+                            filtered_df = filtered_df.sort_values(by=['Margin'], ascending=True)
                             
                             # Scrollable container for the list
                             with st.container(height=600):
@@ -1323,18 +1342,16 @@ try:
                                     item_num = row['ITEMNMBR']
                                     item_desc = row['ITEMDESC']
                                     curr_cost = row.get('CURRCOST', 0)
-                                    pct_change = row.get('PctChange', 0)
+                                    margin = row.get('Margin', 0)
+                                    margin_pct = row.get('MarginPct', 0)
                                     
                                     # Determine color
-                                    if pct_change > 0:
+                                    if margin > 0:
                                         color = "#859900" # Green
-                                        arrow = "▲"
-                                    elif pct_change < 0:
+                                    elif margin < 0:
                                         color = "#dc322f" # Red
-                                        arrow = "▼"
                                     else:
                                         color = "#839496" # Grey
-                                        arrow = "▶"
                                         
                                     # Row Layout
                                     r1, r2, r3, r4 = st.columns([2, 3, 1, 1])
@@ -1352,7 +1369,10 @@ try:
                                         st.markdown(f"<div style='padding-top: 5px;'>${curr_cost:.2f}</div>", unsafe_allow_html=True)
                                         
                                     with r4:
-                                        st.markdown(f"<div style='color: {color}; padding-top: 5px;'>{arrow} {pct_change:+.1f}%</div>", unsafe_allow_html=True)
+                                        st.markdown(
+                                            f"<div style='color: {color}; padding-top: 5px;'>{margin:+.2f} ({margin_pct:+.1f}%)</div>",
+                                            unsafe_allow_html=True,
+                                        )
                                     
                                     st.markdown("<hr style='margin: 0.2em 0; opacity: 0.2;'>", unsafe_allow_html=True)
                         else:
@@ -1627,31 +1647,71 @@ try:
                     'volatility': ag_data.get('volatility', ''),
                 }
                 
-                # --- TOP ROW: KPI CARDS ---
+                # --- KPI CARDS (8 total) ---
+                curr_cost = float(inventory.get('CURRCOST', 0) or 0)
+                std_cost = float(inventory.get('STNDCOST', 0) or 0)
+                margin_delta = std_cost - curr_cost
+                margin_pct = (margin_delta / std_cost * 100) if std_cost else 0
+                margin_color = "#859900" if margin_delta >= 0 else "#dc322f"
+
+                status = inventory.get('StockStatus', 'Unknown')
+                status_color = "#859900" if status == "High" else "#dc322f" if status == "Low" else "#ffb000"
+
+                available = float(inventory.get('Available', 0) or 0)
+                on_order = float(inventory.get('OnOrder', 0) or 0)
+                on_hand = float(inventory.get('TotalOnHand', 0) or 0)
+                allocated = float(inventory.get('TotalAllocated', 0) or 0)
+                inv_value = on_hand * curr_cost
+
+                coverage_days = burn_metrics.get('days_of_coverage') if burn_metrics else None
+                coverage_color = "#dc322f" if coverage_days is not None and coverage_days < 30 else "#ffb000" if coverage_days is not None and coverage_days < 60 else "#859900"
+                coverage_display = f"{coverage_days:.1f} days" if coverage_days is not None else "N/A"
+
+                trend = ag_data.get('trend', 'stable')
+                trend_color = "#dc322f" if trend == "increasing" else "#859900" if trend == "decreasing" else "#ffb000"
+                trend_arrow = "▲" if trend == "increasing" else "▼" if trend == "decreasing" else "▶"
+
+                demand = forecast.get('forecast_next_30days', 'stable')
+
                 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-                
                 with kpi1:
                     st.markdown("### INTERNAL COST")
-                    curr_cost = inventory.get('CURRCOST', 0)
                     st.markdown(f"## ${curr_cost:,.5f}")
-                    
+
                 with kpi2:
-                    st.markdown("### STOCK STATUS")
-                    status = inventory.get('StockStatus', 'Unknown')
-                    color = "#859900" if status == "High" else "#dc322f" if status == "Low" else "#ffb000"
-                    st.markdown(f"## <span style='color:{color}'>{status.upper()}</span>", unsafe_allow_html=True)
-                    
+                    st.markdown("### STANDARD COST")
+                    st.markdown(f"## ${std_cost:,.5f}")
+
                 with kpi3:
-                    st.markdown("### MARKET TREND")
-                    trend = ag_data.get('trend', 'stable')
-                    trend_color = "#dc322f" if trend == "increasing" else "#859900" # Cost increasing is bad usually? Or good for value? Assuming cost.
-                    arrow = "▲" if trend == "increasing" else "▼"
-                    st.markdown(f"## <span style='color:{trend_color}'>{arrow} {trend.upper()}</span>", unsafe_allow_html=True)
+                    st.markdown("### MARGIN (STD-CURR)")
+                    st.markdown(
+                        f"## <span style='color:{margin_color}'>{margin_delta:+,.5f} ({margin_pct:+.1f}%)</span>",
+                        unsafe_allow_html=True,
+                    )
 
                 with kpi4:
+                    st.markdown("### MARKET TREND")
+                    st.markdown(f"## <span style='color:{trend_color}'>{trend_arrow} {trend.upper()}</span>", unsafe_allow_html=True)
+
+                kpi5, kpi6, kpi7, kpi8 = st.columns(4)
+                with kpi5:
                     st.markdown("### DEMAND FORECAST")
-                    demand = forecast.get('forecast_next_30days', 'stable')
-                    st.markdown(f"## {demand.upper()}")
+                    st.markdown(f"## {str(demand).upper()}")
+
+                with kpi6:
+                    st.markdown("### STOCK STATUS")
+                    st.markdown(f"## <span style='color:{status_color}'>{status.upper()}</span>", unsafe_allow_html=True)
+                    st.caption(f"On hand: {on_hand:,.0f} | Allocated: {allocated:,.0f} | Available: {available:,.0f}")
+
+                with kpi7:
+                    st.markdown("### COVERAGE (DAYS)")
+                    st.markdown(f"## <span style='color:{coverage_color}'>{coverage_display}</span>", unsafe_allow_html=True)
+                    st.caption("Based on recent burn rate")
+
+                with kpi8:
+                    st.markdown("### SUPPLY POSITION")
+                    st.markdown(f"**On Order:** {on_order:,.0f}")
+                    st.markdown(f"**Inventory Value:** ${inv_value:,.2f}")
 
                 st.markdown("---")
 
@@ -1709,6 +1769,7 @@ try:
                             range_usage_key = f"{range_master_key}_usage"
                             range_usage_state_key = f"{range_master_key}_usage_state"
                             range_usage_override_key = f"{range_master_key}_usage_override"
+                            range_usage_auto_key = f"{range_master_key}_usage_auto"
                             default_range = (min_txn_date, capped_max_date)
 
                             def _normalize_date_range(val):
@@ -1747,13 +1808,33 @@ try:
                             start_date, end_date = st.session_state[range_master_key]
 
                             if range_usage_override_key not in st.session_state:
-                                st.session_state[range_usage_override_key] = False
+                                st.session_state[range_usage_override_key] = {}
+                            if range_usage_auto_key not in st.session_state:
+                                st.session_state[range_usage_auto_key] = {}
+
+                            def _usage_override_enabled(key):
+                                return st.session_state.get(range_usage_override_key, {}).get(key, False)
+
+                            def _set_usage_override(key, value=True):
+                                st.session_state.setdefault(range_usage_override_key, {})
+                                st.session_state[range_usage_override_key][key] = value
+
+                            def _get_last_auto_range(key):
+                                return st.session_state.get(range_usage_auto_key, {}).get(key)
+
+                            def _set_last_auto_range(key, val):
+                                st.session_state.setdefault(range_usage_auto_key, {})
+                                st.session_state[range_usage_auto_key][key] = val
 
                             st.session_state[range_usage_state_key] = _normalize_date_range(
                                 st.session_state.get(range_usage_state_key, (start_date, end_date))
                             )
-                            if not st.session_state[range_usage_override_key]:
+                            if not _usage_override_enabled(range_usage_state_key):
                                 st.session_state[range_usage_state_key] = (start_date, end_date)
+                            else:
+                                st.session_state[range_usage_state_key] = _normalize_date_range(
+                                    st.session_state[range_usage_state_key]
+                                )
 
                             filtered_hist_df = hist_df[
                                 (hist_df['TransactionDate'].dt.date >= start_date)
@@ -1778,6 +1859,20 @@ try:
                                 usage_end_dt = pd.to_datetime(end_date) if end_date else pd.NaT
                                 start_dt = usage_start_dt
                                 end_dt = usage_end_dt
+
+                                auto_usage_range = None
+                                if "TransactionDate" in data_df.columns:
+                                    tx_dates = pd.to_datetime(data_df["TransactionDate"])
+                                    if not tx_dates.empty:
+                                        auto_usage_range = (
+                                            tx_dates.min().date(),
+                                            tx_dates.max().date(),
+                                        )
+                                        if date_bounds:
+                                            auto_usage_range = (
+                                                max(date_bounds[0], auto_usage_range[0]),
+                                                min(date_bounds[1], auto_usage_range[1]),
+                                            )
 
                                 # Aggregate by date to handle multiple transactions per day
                                 # For RM: Aggregates raw receipts. For FG: Re-aggregates daily summaries (no-op mostly)
@@ -1852,26 +1947,54 @@ try:
                                 # Usage map below price chart with toggle for all vs monthly rollups
                                 usage_view_key = f"{usage_input_key}_view_mode" if usage_input_key else "usage_view_mode"
                                 if usage_state_key and date_bounds:
-                                    st.markdown("#### Adjust usage date range")
-                                    usage_default = _normalize_date_range(
-                                        st.session_state.get(usage_state_key, date_bounds)
+                                    st.session_state[usage_state_key] = _normalize_date_range(
+                                        st.session_state.get(
+                                            usage_state_key,
+                                            auto_usage_range or date_bounds
+                                        )
                                     )
+                                    normalized_auto = _normalize_date_range(auto_usage_range) if auto_usage_range else None
+                                    last_auto_range = _get_last_auto_range(usage_state_key)
+                                    current_usage_range = st.session_state[usage_state_key]
+                                    override_on = _usage_override_enabled(usage_state_key)
+
+                                    if normalized_auto:
+                                        # Auto-sync when override is off or when the stored range is stale (default or prior auto)
+                                        should_force_auto = (
+                                            not override_on
+                                            or (last_auto_range and tuple(current_usage_range) == tuple(last_auto_range))
+                                            or (tuple(current_usage_range) == tuple(date_bounds))
+                                        )
+                                        if should_force_auto:
+                                            st.session_state[usage_state_key] = normalized_auto
+                                            if usage_input_key:
+                                                st.session_state[usage_input_key] = normalized_auto
+                                            _set_usage_override(usage_state_key, False)
+                                        _set_last_auto_range(usage_state_key, normalized_auto)
+
+                                    st.markdown("#### Adjust usage date range")
                                     usage_range = st.date_input(
                                         "Usage date range",
-                                        value=usage_default,
+                                        value=st.session_state[usage_state_key],
                                         min_value=date_bounds[0],
                                         max_value=date_bounds[1],
                                         key=usage_input_key,
                                         label_visibility="collapsed",
                                     )
                                     normalized_usage_range = _normalize_date_range(usage_range)
-                                    if tuple(normalized_usage_range) != tuple(st.session_state.get(usage_state_key, usage_default)):
+                                    if tuple(normalized_usage_range) != tuple(st.session_state.get(usage_state_key)):
                                         st.session_state[usage_state_key] = normalized_usage_range
+                                        _set_usage_override(usage_state_key, True)
+                                        if usage_input_key:
+                                            st.session_state[usage_input_key] = normalized_usage_range
                                         if tuple(usage_range) != tuple(normalized_usage_range):
                                             st.rerun()
                                     start_date, end_date = st.session_state[usage_state_key]
                                     start_dt = pd.to_datetime(start_date) if start_date else pd.NaT
                                     end_dt = pd.to_datetime(end_date) if end_date else pd.NaT
+                                elif auto_usage_range:
+                                    start_dt = pd.to_datetime(auto_usage_range[0]) if auto_usage_range else start_dt
+                                    end_dt = pd.to_datetime(auto_usage_range[1]) if auto_usage_range else end_dt
 
                                 usage_start = start_dt.normalize() if pd.notna(start_dt) else (
                                     pd.to_datetime(data_df["TransactionDate"].min()).normalize() if "TransactionDate" in data_df.columns else pd.NaT
@@ -1932,23 +2055,25 @@ try:
                                                 index=0 if default_view == "Monthly" else 1,
                                                 key=usage_view_key,
                                                 label_visibility="collapsed",
-                                            )
+                                        )
 
                                         if usage_view_mode == "Monthly":
                                             range_notice = None
                                             filtered_udf = monthly_udf
-                                            if pd.notna(usage_start) and pd.notna(usage_end):
-                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"].between(usage_start, usage_end)]
+                                            monthly_start = usage_start.replace(day=1) if pd.notna(usage_start) else usage_start
+                                            monthly_end = (usage_end + pd.offsets.MonthEnd(0)) if pd.notna(usage_end) else usage_end
+                                            if pd.notna(monthly_start) and pd.notna(monthly_end):
+                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"].between(monthly_start, monthly_end)]
                                                 if filtered_udf.empty:
                                                     filtered_udf = monthly_udf
                                                     range_notice = "No usage in the selected range; showing all available usage."
-                                            elif pd.notna(usage_start):
-                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"] >= usage_start]
+                                            elif pd.notna(monthly_start):
+                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"] >= monthly_start]
                                                 if filtered_udf.empty:
                                                     filtered_udf = monthly_udf
                                                     range_notice = "No usage after the selected start; showing all available usage."
-                                            elif pd.notna(usage_end):
-                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"] <= usage_end]
+                                            elif pd.notna(monthly_end):
+                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"] <= monthly_end]
                                                 if filtered_udf.empty:
                                                     filtered_udf = monthly_udf
                                                     range_notice = "No usage before the selected end; showing all available usage."
@@ -1958,8 +2083,8 @@ try:
                                                 return
 
                                             x_domain = None
-                                            if range_notice is None and pd.notna(usage_start) and pd.notna(usage_end):
-                                                x_domain = [usage_start, usage_end]
+                                            if range_notice is None and pd.notna(monthly_start) and pd.notna(monthly_end):
+                                                x_domain = [monthly_start, monthly_end]
                                             elif not filtered_udf.empty:
                                                 x_domain = [
                                                     filtered_udf["UsageDate"].min(),
@@ -2091,14 +2216,14 @@ try:
                                         with tabs[i+1]:
                                             vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == vendor]
                                             render_price_chart(
-                                                vendor_df,
-                                                start_date,
-                                                end_date,
-                                                date_bounds=default_range,
-                                                usage_state_key=range_usage_state_key,
-                                                usage_override_key=range_usage_override_key,
-                                                usage_input_key=f"{range_usage_key}_{vendor}",
-                                            )
+                                            vendor_df,
+                                            start_date,
+                                            end_date,
+                                            date_bounds=default_range,
+                                            usage_state_key=f"{range_usage_state_key}_{vendor}",
+                                            usage_override_key=range_usage_override_key,
+                                            usage_input_key=f"{range_usage_key}_{vendor}",
+                                        )
                                 else:
                                     render_price_chart(
                                         filtered_hist_df,
