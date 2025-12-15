@@ -20,6 +20,7 @@ from constants import (
     OPENAI_CHAT_URL,
     OPENAI_DEFAULT_MODEL,
     OPENAI_TIMEOUT_SECONDS,
+    PLATFORM_CAPABILITIES,
 )
 from secrets_loader import load_openai_settings
 from sql_utils import _extract_json_block
@@ -273,7 +274,8 @@ def call_openai_question_router(
         "- 'chat': For brief greetings, pleasantries, or meta questions about the assistant with no data ask.\n"
         "- 'reject': For consumer advice, holidays, generic shopping, trivia, programming help, or anything unrelated to the plant's ERP data that should not be answered. Do NOT reject purchasing/planning related questions.\n"
         "Please deliberate before deciding. If a question could be answered by either `erp_sql` or `rag`, prefer `rag` if the question is about descriptive information of an entity, and `erp_sql` if it is about metrics, calculations or reports.\n"
-        "Default to 'erp_sql' when unsure. Never suggest web lookups or hybrid answers."
+        "Default to 'erp_sql' when unsure. Never suggest web lookups or hybrid answers.\n\n"
+        f"{PLATFORM_CAPABILITIES}"
     )
 
     user_sections = [
@@ -499,9 +501,9 @@ def call_openai_general_response(
 
     model = settings.get("model", OPENAI_DEFAULT_MODEL)
     system_prompt = (
-        "You are a senior analyst who blends ERP operational knowledge with current web context. "
         "Answer concisely, cite sources when possible, and acknowledge freshness limits if context is thin. "
-        "Think step by step before responding."
+        "Think step by step before responding.\n\n"
+        f"{PLATFORM_CAPABILITIES}"
     )
     user_sections = [
         f"Current date: {today.isoformat()}",
@@ -773,7 +775,8 @@ def call_openai_small_talk(prompt: str, today: datetime.date) -> dict | None:
     system_prompt = (
         "You are the friendly small-talk voice of a chemical manufacturing data copilot. "
         "Keep responses concise (1-3 sentences), upbeat, and workplace appropriate. "
-        "Do not invent ERP data or SQL. If the user hints at data needs, invite them to ask a specific question you can look up."
+        "Do not invent ERP data or SQL. If the user hints at data needs, invite them to ask a specific question you can look up.\n\n"
+        f"{PLATFORM_CAPABILITIES}"
     )
     user_prompt = (
         f"Current date: {today.isoformat()}\n"

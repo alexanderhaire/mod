@@ -2,6 +2,7 @@
 and displays the results."""
 import calendar
 import datetime
+import hashlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,10 @@ try:
     import altair as alt
 except ImportError:
     alt = None
-from auth import authenticate_user, ensure_user_store, is_admin, register_user
+from auth import authenticate_user, authenticate_vendor, authenticate_broker, ensure_user_store, is_admin, register_user
+from vendor_portal import render_vendor_portal
+from broker_portal import render_broker_portal
+from procurement_optimizer import render_procurement_cockpit
 from constants import (
     LOGGER,
     RAW_MATERIAL_CLASS_CODES,
@@ -28,9 +32,11 @@ from market_insights import (
     calculate_buying_signals, 
     forecast_demand,
     fetch_monthly_price_trends,
+    fetch_product_price_history,
     fetch_product_usage_history,
     calculate_inventory_runway,
     calculate_seasonal_burn_metrics,
+    recommend_optimal_buy_window,
     get_volatility_score,
     get_batch_volatility_scores,
     get_seasonal_pattern,
@@ -230,14 +236,39 @@ def _ensure_auth_state() -> None:
         st.session_state.is_admin = False
 
 
+
+def verify_vendor_identity(user_input):
+    """Check if the input matches a valid Vendor ID or Name in PM00200."""
+    try:
+        conn_str, _, _, _ = build_connection_string()
+        conn = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
+        
+        # Check ID match first
+        cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDORID = ?", user_input)
+        row = cursor.fetchone()
+        if row:
+            return True, row.VENDORID.strip(), row.VENDNAME.strip()
+            
+        # Check Name match (fuzzy or exact)
+        cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDNAME LIKE ?", f"%{user_input}%")
+        row = cursor.fetchone()
+        if row:
+            return True, row.VENDORID.strip(), row.VENDNAME.strip()
+            
+        return False, None, None
+    except Exception as e:
+        LOGGER.error(f"Vendor verification failed: {e}")
+        return False, None, None
+
 def _render_auth_gate() -> None:
     """Render sign-in and sign-up forms; halt the app until authenticated."""
     st.subheader("Welcome")
     st.markdown("Sign in to use the data copilot. Create an account if you do not have one.")
 
-    login_tab, signup_tab = st.tabs(["Sign in", "Sign up"])
+    employee_tab, vendor_tab, broker_tab, signup_tab = st.tabs(["CDI Employee login", "Vendor Login", "Freight broker login", "Sign up"])
 
-    with login_tab:
+    with employee_tab:
         login_user = st.text_input("Username", key="login_username")
         login_pass = st.text_input("Password", type="password", key="login_password")
         if st.button("Sign in"):
@@ -245,17 +276,130 @@ def _render_auth_gate() -> None:
             if ok:
                 st.session_state.user = login_user.strip()
                 st.session_state.is_admin = is_admin(st.session_state.user)
+                st.session_state.is_vendor = False
+                st.session_state.is_broker = False
                 st.success(message)
                 st.rerun()
             else:
                 st.error(message)
 
+    with vendor_tab:
+        st.caption("Restricted area for approved vendors.")
+        v_user = st.text_input("Vendor ID", key="vendor_user")
+        v_pass = st.text_input("Access Key", type="password", key="vendor_pass")
+        if st.button("Vendor Sign In"):
+            ok, message, linked_id = authenticate_vendor(v_user, v_pass)
+            if ok:
+                # If account has a linked ID, use it directly (Verified Identity)
+                if linked_id:
+                    st.session_state.user = linked_id
+                    st.session_state.user_name = v_user # Fallback name
+                    # Try to fetch real name
+                    _, _, real_name = verify_vendor_identity(linked_id)
+                    if real_name:
+                        st.session_state.user_name = real_name
+                        
+                    st.session_state.is_admin = False
+                    st.session_state.is_vendor = True
+                    st.session_state.is_broker = False
+                    st.success(f"Welcome, {st.session_state.user_name}!")
+                    st.rerun()
+                # Legacy Fallback or New User without Link
+                else:
+                    # VERIFY IDENTITY
+                    is_valid, clean_id, clean_name = verify_vendor_identity(v_user)
+                    if is_valid:
+                        st.session_state.user = clean_id
+                        st.session_state.user_name = clean_name # Store friendly name
+                        st.session_state.is_admin = False
+                        st.session_state.is_vendor = True
+                        st.session_state.is_broker = False
+                        st.success(f"Welcome, {clean_name}!")
+                        st.rerun()
+                    else:
+                        st.error("Authentication successful, but Vendor ID not found in Master File (PM00200).")
+            else:
+                st.error(message)
+
+    with broker_tab:
+        st.caption("Freight Operations Login")
+        b_user = st.text_input("Broker ID", key="broker_user")
+        b_pass = st.text_input("Broker Key", type="password", key="broker_pass")
+        if st.button("Broker Sign In"):
+            ok, message, linked_id = authenticate_broker(b_user, b_pass)
+            if ok:
+                # If account has a linked ID, use it directly
+                if linked_id:
+                    st.session_state.user = linked_id
+                    st.session_state.user_name = b_user
+                    _, _, real_name = verify_vendor_identity(linked_id)
+                    if real_name:
+                        st.session_state.user_name = real_name
+
+                    st.session_state.is_admin = False
+                    st.session_state.is_vendor = False
+                    st.session_state.is_broker = True
+                    st.success(f"Welcome, {st.session_state.user_name}!")
+                    st.rerun()
+                # Legacy Fallback
+                else:
+                    # VERIFY IDENTITY
+                    is_valid, clean_id, clean_name = verify_vendor_identity(b_user)
+                    if is_valid:
+                        st.session_state.user = clean_id
+                        st.session_state.user_name = clean_name
+                        st.session_state.is_admin = False
+                        st.session_state.is_vendor = False
+                        st.session_state.is_broker = True
+                        st.success(f"Welcome, {clean_name}!")
+                        st.rerun()
+                    else:
+                        st.error("Authentication successful, but Broker ID not found in Vendor Master.")
+            else:
+                st.error(message)
+
     with signup_tab:
-        with st.form("signup_form", clear_on_submit=True):
+        st.subheader("Create New Account")
+        # Move radio outside form to allow immediate rerun/UI update when changed
+        account_type = st.radio("I am a:", ["CDI Employee", "Vendor", "Freight Broker"])
+        
+        # Identity Link Selection
+        linked_identity_id = None
+        if account_type in ["Vendor", "Freight Broker"]:
+            st.markdown("#### Link to Existing Company")
+            st.caption("Select your company to automatically verified access. If new, select 'New Entity'.")
+            
+            # Fetch active vendors/brokers for dropdown
+            conn_str, _, _, _ = build_connection_string()
+            try:
+                conn = pyodbc.connect(conn_str)
+                cursor = conn.cursor()
+                # Fetch Name and ID
+                cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDSTTS = 1 ORDER BY VENDNAME")
+                rows = cursor.fetchall()
+                company_map = {f"{r.VENDNAME.strip()} ({r.VENDORID.strip()})": r.VENDORID.strip() for r in rows}
+                
+                # Add "New" option
+                options = ["(New Entity / Not Listed)"] + list(company_map.keys())
+                selection = st.selectbox("Select Your Company", options)
+                
+                if selection != "(New Entity / Not Listed)":
+                    linked_identity_id = company_map[selection]
+                    st.success(f"Account will be linked to: {linked_identity_id}")
+            except Exception as e:
+                st.warning("Could not load company list. Proceeding as new entity.")
+
+        with st.form("signup_form", clear_on_submit=False):
             new_user = st.text_input("Username", key="signup_username")
             new_pass = st.text_input("Password", type="password", key="signup_password")
             confirm_pass = st.text_input("Confirm password", type="password", key="signup_confirm")
+            
+            access_key = ""
+            if account_type == "CDI Employee":
+                access_key = st.text_input("CDI Employee Access Key", type="password", help="Required for employee registration")
+
             submitted = st.form_submit_button("Create account")
+            
             if submitted:
                 if not new_user or not new_pass:
                     st.error("Username and password are required.")
@@ -264,12 +408,27 @@ def _render_auth_gate() -> None:
                 elif len(new_pass) < 8:
                     st.error("Use at least 8 characters for your password.")
                 else:
-                    ok, message = register_user(new_user, new_pass)
-                    if ok:
-                        st.success(message)
+                    # Role validation logic
+                    is_vendor = (account_type == "Vendor")
+                    is_broker = (account_type == "Freight Broker")
+                    
+                    if account_type == "CDI Employee":
+                        if access_key != "CDI2025":
+                            st.error("Invalid CDI Employee Access Key.")
+                        else:
+                            ok, message = register_user(new_user, new_pass, is_vendor=False, is_broker=False)
+                            if ok:
+                                st.success(message)
+                            else:
+                                st.error(message)
                     else:
-                        st.error(message)
-
+                        # Vendors and Brokers register freely (or per business logic, but for now open)
+                        ok, message = register_user(new_user, new_pass, is_vendor=is_vendor, is_broker=is_broker, linked_id=linked_identity_id)
+                        if ok:
+                            st.success(f"Account created for {account_type}. pending approval.") # Optional message enhancement
+                        else:
+                            st.error(message)
+    
     st.stop()
 
 
@@ -731,9 +890,108 @@ def _fetch_market_data(cursor: pyodbc.Cursor) -> pd.DataFrame:
         LOGGER.error(f"Market data fetch failed: {e}")
         return pd.DataFrame()
 
+
+def _buy_calendar_cache_key(df_priority: pd.DataFrame, today: datetime.date) -> str:
+    """Generate a stable cache key for the buy calendar so chat reruns do not rebuild it unnecessarily."""
+    if df_priority.empty:
+        return f"{today.isoformat()}-empty"
+
+    cols = [col for col in ("ITEMNMBR", "ITEMDESC", "CURRCOST", "Segment") if col in df_priority.columns]
+    snapshot = df_priority[cols].copy() if cols else df_priority.copy()
+    if "ITEMNMBR" in snapshot.columns:
+        snapshot = snapshot.sort_values("ITEMNMBR")
+    snapshot = snapshot.fillna("")
+    digest_source = snapshot.to_json(date_format="iso", orient="split", double_precision=6)
+    digest = hashlib.sha1(digest_source.encode("utf-8")).hexdigest()
+    return f"{today.isoformat()}-{digest}"
+
+
+def _build_buy_calendar(cursor: pyodbc.Cursor, df_priority: pd.DataFrame, today: datetime.date, progress_cb=None) -> pd.DataFrame:
+    """Build the buy calendar DataFrame, optionally updating a progress callback as items are scheduled."""
+    if df_priority.empty:
+        return pd.DataFrame()
+
+    calendar_rows = []
+    total_items = len(df_priority)
+
+    for i, (_, row) in enumerate(df_priority.iterrows()):
+        item_num = row["ITEMNMBR"]
+        item_desc = row["ITEMDESC"]
+
+        runway = calculate_inventory_runway(cursor, item_num)
+        usage_hist = fetch_product_usage_history(cursor, item_num, days=365)
+        if not usage_hist:
+            usage_hist = fetch_product_usage_history(cursor, item_num, days=365, location=None)
+
+        burn_metrics = calculate_seasonal_burn_metrics(
+            usage_history=usage_hist or [],
+            on_hand=runway.get("on_hand", 0),
+            on_order=runway.get("on_order", 0),
+            today=today,
+        )
+
+        price_hist = fetch_product_price_history(cursor, item_num, days=730)
+
+        optimal_buy = recommend_optimal_buy_window(
+            price_history=price_hist,
+            usage_history=usage_hist or [],
+            coverage_days=burn_metrics.get("days_of_coverage") if burn_metrics else None,
+            available_stock=burn_metrics.get("available_stock") if burn_metrics else runway.get("available"),
+            on_order=runway.get("on_order"),
+            today=today,
+        )
+
+        coverage_days = burn_metrics.get("days_of_coverage") if burn_metrics else None
+        runway_days = runway.get("runway_days")
+        fallback_days = float(coverage_days) if coverage_days is not None else float(runway_days or 0)
+
+        if optimal_buy.get("status") == "ok":
+            buy_in_days = int(max(0, optimal_buy.get("days_from_now", 0)))
+            latest_safe = int(max(0, optimal_buy.get("latest_safe_day", buy_in_days)))
+        else:
+            buy_in_days = int(max(0, round(fallback_days - 7))) if fallback_days else 0
+            latest_safe = int(max(buy_in_days, fallback_days)) if fallback_days else buy_in_days
+
+        buy_date = today + datetime.timedelta(days=buy_in_days)
+        latest_date = today + datetime.timedelta(days=latest_safe)
+
+        calendar_rows.append(
+            {
+                "Item": item_num,
+                "Description": item_desc,
+                "BuyDate": buy_date,
+                "LatestSafe": latest_date,
+                "RunwayDays": runway_days,
+                "Urgency": runway.get("urgency", "UNKNOWN"),
+                "CoverageDays": coverage_days,
+                "PriceSignal": optimal_buy.get("trend_direction", "flat"),
+                "EstPrice": optimal_buy.get("expected_price", float(row.get("CURRCOST", 0) or 0)),
+                "PriceDelta": optimal_buy.get("price_delta", 0.0),
+                "Confidence": optimal_buy.get("confidence", 0.0),
+                "Reason": optimal_buy.get("reason", "Scheduled using coverage and price trend."),
+            }
+        )
+
+        if progress_cb and total_items:
+            progress_cb(i + 1, total_items, item_num)
+
+    cal_df = pd.DataFrame(calendar_rows)
+    if cal_df.empty:
+        return cal_df
+
+    cal_df["BuyDate"] = pd.to_datetime(cal_df["BuyDate"])
+    cal_df["LatestSafe"] = pd.to_datetime(cal_df["LatestSafe"])
+    cal_df["RunwayDays"] = pd.to_numeric(cal_df["RunwayDays"], errors="coerce").fillna(0)
+    cal_df["CoverageDays"] = pd.to_numeric(cal_df["CoverageDays"], errors="coerce")
+    cal_df["ConfidencePct"] = (pd.to_numeric(cal_df["Confidence"], errors="coerce").fillna(0) * 100).clip(lower=0, upper=100)
+    cal_df["Week"] = cal_df["BuyDate"].dt.to_period("W").apply(lambda r: r.start_time)
+    cal_df = cal_df.sort_values(["BuyDate", "Urgency"])
+    return cal_df
+
 _ensure_auth_state()
 if st.session_state.user is None:
     _render_auth_gate()
+
 
 _ensure_chat_state()
 
@@ -749,11 +1007,26 @@ if "selected_product" not in st.session_state:
 if "current_page" not in st.session_state:
     st.session_state.current_page = "market_overview"  # or "product_insights"
 
+# Cache for the Buy Calendar so chat reruns don't trigger a rebuild
+if "buy_calendar_cache" not in st.session_state:
+    st.session_state.buy_calendar_cache = {}
+
 # --- MAIN DASHBOARD (MARKET MONITOR) ---
 conn_str, server, db, auth = build_connection_string()
 try:
+
     with pyodbc.connect(conn_str, autocommit=True) as conn:
         cursor = conn.cursor()
+        
+        # Vendor Portal Redirection (Now with access to cursor)
+        if st.session_state.get("is_vendor"):
+            render_vendor_portal(cursor)
+            st.stop()
+            
+        # Broker Portal Redirection
+        if st.session_state.get("is_broker"):
+            render_broker_portal(cursor)
+            st.stop()
         
         # Fetch market data (needed for both pages)
         df_market = _fetch_market_data(cursor)
@@ -849,324 +1122,112 @@ try:
                     df_market['Segment'] = df_market.apply(_get_market_segment, axis=1)
                     
                     # View Selection
-                    view_mode = st.radio("View Mode", ["Market Monitor", "Procurement Dashboard"], horizontal=True, label_visibility="collapsed", key="view_mode_radio")
+                    view_mode = st.radio(
+                        "View Mode",
+                        ["Market Monitor", "Command Center", "Buy Calendar"],
+                        horizontal=True,
+                        label_visibility="collapsed",
+                        key="view_mode_radio",
+                    )
                     
-                    if view_mode == "Procurement Dashboard":
+                    if view_mode == "Command Center":
+                        # Updated to Command Center
+                        render_procurement_cockpit(cursor)
+                    
+                    elif view_mode == "Buy Calendar":
                         st.markdown("---")
-                        st.markdown("### >> PROCUREMENT_INTELLIGENCE")
-                        st.caption("Showing only active raw materials with usage/purchase history")
+                        st.markdown("### >> BUY_CALENDAR")
+                        st.caption("Calendar of recommended buys using coverage, runway, and the optimal price window logic.")
+
+                        # Use the same raw-material classification as Market Monitor
+                        # Ensure specific filtered query is used for the Buy Calendar
+                        # We do NOT use df_market here because it lacks the strict 1-year + vendor history filter
+                        df_priority = get_priority_raw_materials(cursor, limit=5000, require_purchase_history=True)
                         
-                        # Get priority raw materials (items with actual activity)
-                        df_priority = get_priority_raw_materials(cursor, limit=25)
-                        
+                        if not df_priority.empty:
+                            if 'ITMCLSCD' in df_priority.columns:
+                                df_priority['Segment'] = df_priority.apply(_get_market_segment, axis=1)
+                            elif 'Segment' not in df_priority.columns:
+                                df_priority['Segment'] = "Raw Material"
+                            df_priority['ITEMNMBR'] = df_priority['ITEMNMBR'].astype(str).str.strip()
+                            df_priority = df_priority[df_priority['Segment'] == "Raw Material"]
+                            # Removed hard exclusion of "REC" items to ensure consistency with Broker Portal
+
+
                         if df_priority.empty:
-                            st.info("No active raw materials found. Items shown here have recent usage or purchase history.")
+                            st.info("No active raw materials found to schedule buy windows.")
                         else:
-                            # Progress bar for analysis
-                            progress_bar = st.progress(0, text="Analyzing market signals...")
-                            
-                            # Analyze priority items
-                            analysis_results = []
-                            total_items = len(df_priority)
-                            
-                            for i, (_, row) in enumerate(df_priority.iterrows()):
-                                item_num = row['ITEMNMBR']
-                                # Calculate signals
-                                signals = calculate_buying_signals(cursor, item_num)
-                                forecast = forecast_demand(cursor, item_num)
-                                runway = calculate_inventory_runway(cursor, item_num)
-                                
-                                analysis_results.append({
-                                    'Item': item_num,
-                                    'Description': row['ITEMDESC'],
-                                    'Current Cost': row['CURRCOST'],
-                                    'Signal': signals.get('signal', 'Unknown'),
-                                    'Score': signals.get('score', 0),
-                                    'Reason': signals.get('reason', ''),
-                                    'Forecast (3mo)': forecast.get('forecast_next_3mo', 0),
-                                    'Trend': forecast.get('trend', 'Unknown'),
-                                    'Runway': runway.get('runway_days', 999),
-                                    'Urgency': runway.get('urgency', 'OK'),
-                                    'AnnualSpend': row.get('EstAnnualSpend', 0)
-                                })
-                                progress_bar.progress((i + 1) / total_items, text=f"Analyzing {item_num}...")
-                            
-                            progress_bar.empty()
-                            
-                            df_analysis = pd.DataFrame(analysis_results)
-                            
-                            # 0. Show Attention Items First (Most Important!)
-                            st.subheader(">> ITEMS_REQUIRING_ATTENTION")
-                            attention_items = get_items_needing_attention(cursor, df_priority)
-                            
-                            if attention_items:
-                                for item in attention_items[:5]:  # Top 5 most urgent
-                                    with st.container():
-                                        alerts_html = "".join([
-                                            f'<span style="margin-right: 10px;">{a["icon"]} <strong>{a["action"]}</strong>: {a["message"]}</span>'
-                                            for a in item['Alerts']
-                                        ])
-                                        
-                                        border_color = "#dc322f" if item['Priority'] >= 100 else "#b58900" if item['Priority'] >= 50 else "#859900"
-                                        
-                                        st.markdown(f"""
-                                        <div style="border: 2px solid {border_color}; padding: 12px; margin-bottom: 10px; border-radius: 5px; background: #0a0a0a;">
-                                            <h4 style="color: {border_color}; margin: 0;">{item['Item']}</h4>
-                                            <p style="margin: 4px 0; color: #839496;">{item['Description']} | Cost: ${item['Cost']:.2f}</p>
-                                            <div style="margin-top: 8px; font-size: 0.9em;">
-                                                {alerts_html}
-                                            </div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            else:
-                                st.success("✓ No items require immediate attention")
-                            
-                            # 1. Strategic Buying Opportunities
-                            st.markdown("---")
-                            st.subheader(">> STRATEGIC_BUY_SIGNALS")
-                            buy_opps = df_analysis[df_analysis['Score'] >= 60].sort_values('Score', ascending=False)
-                            
-                            if not buy_opps.empty:
-                                for _, row in buy_opps.head(5).iterrows():
-                                    color = "#859900" if row['Score'] >= 80 else "#b58900"
-                                    with st.container():
-                                        st.markdown(f"""
-                                        <div style="border: 1px solid {color}; padding: 10px; margin-bottom: 10px; border-radius: 5px;">
-                                            <h4 style="color: {color}; margin: 0;">{row['Signal'].upper()} - {row['Item']} ({row['Score']}/100)</h4>
-                                            <p style="margin: 5px 0;"><strong>{row['Description']}</strong> | Cost: ${row['Current Cost']:.2f}</p>
-                                            <p style="margin: 5px 0; font-style: italic;">"{row['Reason']}"</p>
-                                            <p style="margin: 5px 0;">Forecast Trend: <strong>{row['Trend']}</strong></p>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                            else:
-                                st.info("No strong buying opportunities detected at this time.")
-                            
-                            # 2. Price Trend Charts
-                            st.markdown("---")
-                            st.subheader(">> PRICE_TREND_ANALYSIS")
-                            
-                            # Create two columns for charts
-                            chart_col1, chart_col2 = st.columns(2)
-                            def _render_info_card(message: str) -> None:
-                                st.markdown(
-                                    f"""
-                                    <div style="background: #0c1f3a; border: 1px solid #14395f; color: #6fb5ff; padding: 14px; border-radius: 6px;">
-                                        {message}
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
-                            
-                            with chart_col1:
-                                st.markdown("#### 12-MONTH PRICE TRENDS")
-                                # Get top 5 items with highest score for charting
-                                top_items = df_analysis.nlargest(5, 'Score')['Item'].tolist()[:3]
-                                
-                                if top_items and alt:
-                                    all_trends = []
-                                    for item in top_items:
-                                        trend_df = fetch_monthly_price_trends(cursor, item, months=12)
-                                        if not trend_df.empty:
-                                            trend_df['Item'] = item
-                                            all_trends.append(trend_df)
-                                    
-                                    if all_trends:
-                                        combined_df = pd.concat(all_trends, ignore_index=True)
-                                        
-                                        # Create Altair line chart with terminal theme
-                                        chart = alt.Chart(combined_df).mark_line(strokeWidth=2).encode(
-                                            x=alt.X('Date:T', title='Month', axis=alt.Axis(
-                                                labelColor='#ffb000', titleColor='#ffb000', gridColor='#333'
-                                            )),
-                                            y=alt.Y('AvgCost:Q', title='Avg Cost ($)', axis=alt.Axis(
-                                                labelColor='#ffb000', titleColor='#ffb000', gridColor='#333'
-                                            )),
-                                            color=alt.Color('Item:N', scale=alt.Scale(
-                                                range=['#ffb000', '#859900', '#268bd2']
-                                            )),
-                                            tooltip=['Item', 'MonthLabel', 'AvgCost']
-                                        ).properties(
-                                            height=300
-                                        ).configure_axis(
-                                            labelColor='#ffb000',
-                                            titleColor='#ffb000',
-                                            gridColor='#333',
-                                            domainColor='#333',
-                                            tickColor='#333'
-                                        ).configure_legend(
-                                            labelColor='#ffb000',
-                                            titleColor='#ffb000'
-                                        ).configure_view(
-                                            stroke='#333',
-                                            strokeWidth=1
-                                        ).configure(background='#000000')
-                                        
-                                        st.altair_chart(chart, width="stretch")
-                                    else:
-                                        _render_info_card("No price history available for charting")
-                                else:
-                                    _render_info_card("Select items to view price trends")
+                            today = datetime.date.today()
+                            cache_key = _buy_calendar_cache_key(df_priority, today)
+                            refresh_requested = st.button("Refresh buy calendar", key="refresh_buy_calendar")
+                            cache = st.session_state.get("buy_calendar_cache", {})
 
-                                # Usage map below price trends (line + points, styled like price chart)
-                                st.markdown("#### 12-MONTH USAGE MAP")
-                                if alt:
-                                    usage_df = fetch_product_usage_history(cursor, product_item, days=365, location=None)
-                                    if usage_df:
-                                        dfu = pd.DataFrame(usage_df)
-                                        if not dfu.empty:
-                                            # Ensure no Decimal types leak into Altair
-                                            from decimal import Decimal as _Decimal
-                                            dfu = dfu.map(lambda v: float(v) if isinstance(v, _Decimal) else v)
-                                            if "UsageQty" in dfu.columns:
-                                                dfu["UsageQty"] = pd.to_numeric(dfu["UsageQty"], errors="coerce")
-                                            dfu["Item"] = product_item
-                                            dfu["MonthLabel"] = dfu.apply(
-                                                lambda r: f"{int(r.get('Year', 0))}-{int(r.get('Month', 0)):02d}", axis=1
-                                            )
-                                            base = alt.Chart(dfu).encode(
-                                                x=alt.X(
-                                                    "MonthLabel:N",
-                                                    sort=None,
-                                                    title="Month",
-                                                    axis=alt.Axis(labelAngle=-45, labelColor="#555", titleColor="#555"),
-                                                )
-                                            )
-                                            bars = base.mark_bar(color="#859900", opacity=0.3).encode(
-                                                y=alt.Y(
-                                                    "UsageQty:Q",
-                                                    title="Usage Qty",
-                                                    axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"),
-                                                    scale=alt.Scale(zero=True),
-                                                )
-                                            )
-                                            line = base.mark_line(
-                                                strokeWidth=2,
-                                                color="#ffb000",
-                                            ).encode(
-                                                y=alt.Y(
-                                                    "UsageQty:Q",
-                                                    title="Usage Qty",
-                                                    axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"),
-                                                    scale=alt.Scale(zero=True),
-                                                ),
-                                                tooltip=["Item", "MonthName", "Year", "UsageQty"],
-                                            )
-                                            pts = line.mark_point(filled=True, size=70, color="#ffb000")
-                                            usage_chart = (
-                                                alt.layer(bars, line, pts)
-                                                .resolve_scale(y="shared")
-                                                .properties(height=260)
-                                                .configure_axis(
-                                                    gridColor="#e0e0e0",
-                                                    domainColor="#cccccc",
-                                                    tickColor="#cccccc",
-                                                )
-                                                .configure_view(stroke="#e0e0e0", strokeWidth=1)
-                                                .configure(background="#ffffff")
-                                        )
-                                        st.altair_chart(usage_chart, width="stretch")
-                                    else:
-                                        _render_info_card("No usage history available for charting")
-                                else:
-                                    _render_info_card("No usage history available for charting")
-
-                            with chart_col2:
-                                st.markdown("#### INVENTORY RUNWAY (DAYS OF SUPPLY)")
-                                
-                                # Calculate runway for top items
-                                runway_data = []
-                                for item in df_analysis['Item'].head(10).tolist():
-                                    runway = calculate_inventory_runway(cursor, item)
-                                    runway_data.append({
-                                        'Item': item,
-                                        'Days': min(runway.get('runway_days', 0), 180),
-                                        'Urgency': runway.get('urgency', 'UNKNOWN'),
-                                        'Color': runway.get('color', '#839496')
-                                    })
-                                
-                                if runway_data and alt:
-                                    runway_df = pd.DataFrame(runway_data)
-                                    runway_df = runway_df.sort_values('Days', ascending=False)
-                                    
-                                    # Horizontal bar chart for runway
-                                    runway_chart = alt.Chart(runway_df).mark_bar().encode(
-                                        y=alt.Y('Item:N', sort='-x', axis=alt.Axis(
-                                            labelColor='#ffb000', titleColor='#ffb000'
-                                        )),
-                                        x=alt.X('Days:Q', title='Days of Supply', scale=alt.Scale(domain=[0, 180]), axis=alt.Axis(
-                                            labelColor='#ffb000', titleColor='#ffb000', gridColor='#333'
-                                        )),
-                                        color=alt.Color('Urgency:N', scale=alt.Scale(
-                                            domain=['CRITICAL', 'WARNING', 'OK'],
-                                            range=['#dc322f', '#b58900', '#859900']
-                                        ), legend=alt.Legend(title='Urgency', labelColor='#ffb000', titleColor='#ffb000')),
-                                        tooltip=['Item', 'Days', 'Urgency']
-                                    ).properties(
-                                        height=300
-                                    ).configure_axis(
-                                        labelColor='#ffb000',
-                                        titleColor='#ffb000',
-                                        gridColor='#333',
-                                        domainColor='#333',
-                                        tickColor='#333'
-                                    ).configure_view(
-                                        stroke='#333',
-                                        strokeWidth=1
-                                    ).configure(background='#000000')
-                                    
-                                    st.altair_chart(runway_chart, width="stretch")
-                                    
-                                    # Add legend explanation
-                                    st.markdown("""
-                                    <div style="font-size: 0.8em; color: #839496;">
-                                        🔴 CRITICAL: &lt;30 days | 🟡 WARNING: 30-60 days | 🟢 OK: &gt;60 days
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                else:
-                                    _render_info_card("No runway data available for selected items")
-                            
-                            # 3. Seasonal Pattern Detection
-                            st.markdown("---")
-                            st.subheader(">> SEASONAL_PATTERNS")
-                            
-                            seasonal_col1, seasonal_col2, seasonal_col3 = st.columns(3)
-                            
-                            # Analyze seasonality for top items
-                            seasonal_items = df_analysis['Item'].head(6).tolist()
-                            
-                            for i, item in enumerate(seasonal_items[:3]):
-                                with [seasonal_col1, seasonal_col2, seasonal_col3][i]:
-                                    pattern = get_seasonal_pattern(cursor, item)
-                                    volatility = get_volatility_score(cursor, item)
-                                    
-                                    pattern_icon = "🌊" if pattern.get('has_pattern') else "➡️"
-                                    vol_color = volatility.get('color', '#839496')
-                                    
-                                    st.markdown(f"""
-                                    <div style="border: 1px solid #333; padding: 12px; border-radius: 5px; background: #050505;">
-                                        <h5 style="color: #ffb000; margin: 0 0 8px 0;">{item}</h5>
-                                        <p style="margin: 4px 0; font-size: 0.9em;">
-                                            {pattern_icon} <strong>{pattern.get('pattern', 'Unknown')}</strong>
-                                        </p>
-                                        <p style="margin: 4px 0; font-size: 0.85em; color: #839496;">
-                                            Peak: {pattern.get('peak_month', 'N/A')} | Low: {pattern.get('low_month', 'N/A')}
-                                        </p>
-                                        <p style="margin: 4px 0;">
-                                            <span style="color: {vol_color};">● Volatility: {volatility.get('volatility_label', 'Unknown')}</span>
-                                            <span style="color: #839496; font-size: 0.8em;"> ({volatility.get('volatility_score', 0)}%)</span>
-                                        </p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            # 4. Market Analysis Table
-                            st.markdown("---")
-                            st.subheader(">> MARKET_ANALYSIS_TABLE")
-                            st.dataframe(
-                                df_analysis.style.map(lambda x: 'color: #859900' if x == 'Strong Buy' else 'color: #dc322f' if x == 'Wait' else '', subset=['Signal']),
-                                width="stretch"
+                            use_cache = (
+                                not refresh_requested
+                                and cache.get("key") == cache_key
+                                and isinstance(cache.get("data"), pd.DataFrame)
                             )
+
+                            if use_cache:
+                                cal_df = cache.get("data")
+                            else:
+                                progress_bar = st.progress(0, text="Building buy calendar...")
+
+                                def _update_progress(done, total, item):
+                                    progress_bar.progress(done / total, text=f"Scheduling {item}...")
+
+                                cal_df = _build_buy_calendar(cursor, df_priority, today, progress_cb=_update_progress)
+                                progress_bar.empty()
+                                st.session_state.buy_calendar_cache = {
+                                    "key": cache_key,
+                                    "data": cal_df,
+                                    "built_at": datetime.datetime.utcnow().isoformat(),
+                                }
+
+                            if cal_df is None or cal_df.empty:
+                                st.info("No buy windows could be scheduled with the current data.")
+                            else:
+                                cache_time = (
+                                    cache.get("built_at")
+                                    if use_cache
+                                    else st.session_state.buy_calendar_cache.get("built_at")
+                                )
+                                if cache_time:
+                                    st.caption(f"Using cached schedule from {cache_time} UTC. Refresh to rebuild.")
+
+                                st.markdown("#### UPCOMING BUY SCHEDULE")
+
+                                urgency_colors = {
+                                    'CRITICAL': '#dc322f',
+                                    'WARNING': '#b58900',
+                                    'OK': '#859900'
+                                }
+
+                                for week_start, group in cal_df.groupby('Week'):
+                                    week_label = pd.to_datetime(week_start).strftime("Week of %b %d")
+                                    st.markdown(f"**{week_label}**")
+
+                                    for _, rec in group.iterrows():
+                                        color = urgency_colors.get(str(rec['Urgency']).upper(), '#839496')
+                                        st.markdown(f"""
+                                        <div style="border-left: 4px solid {color}; padding: 8px 12px; margin-bottom: 8px; background: #0a0a0a;">
+                                            <div style="color:#ffb000; font-weight:bold;">{rec['Item']} · {rec['BuyDate'].strftime('%b %d')}</div>
+                                            <div style="color:#839496; font-size:0.9em;">{rec['Description']}</div>
+                                            <div style="color:{color}; font-size:0.85em;">Runway {rec['RunwayDays']:.1f}d | Latest safe {rec['LatestSafe'].strftime('%b %d')}</div>
+                                            <div style="color:#839496; font-size:0.85em;">Price window: {rec['PriceSignal']} ${float(rec['EstPrice']):,.2f} ({float(rec['PriceDelta']):+,.2f}) · Confidence {rec['ConfidencePct']:.0f}%</div>
+                                            <div style="color:#586e75; font-size:0.8em;">{rec['Reason']}</div>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+
+                                st.markdown("#### FULL BUY LIST")
+                                display_df = cal_df[['BuyDate', 'LatestSafe', 'Item', 'Description', 'Urgency', 'RunwayDays', 'CoverageDays', 'PriceSignal', 'EstPrice', 'PriceDelta', 'ConfidencePct']].copy()
+                                display_df['BuyDate'] = display_df['BuyDate'].dt.strftime('%b %d')
+                                display_df['LatestSafe'] = display_df['LatestSafe'].dt.strftime('%b %d')
+                                display_df['RunwayDays'] = display_df['RunwayDays'].round(1)
+                                display_df['CoverageDays'] = display_df['CoverageDays'].round(1)
+                                st.dataframe(display_df, hide_index=True, use_container_width=True)
                     
-                    else: # Market Monitor View
+                    elif view_mode == "Market Monitor":
                         f_col1, f_col2, f_col3 = st.columns([1, 1, 2])
                         with f_col1:
                             # Segment Filter (Default to Raw Material)
@@ -1536,6 +1597,14 @@ try:
                     on_order=inventory.get('OnOrder', 0),
                     today=datetime.date.today(),
                 )
+                optimal_buy = recommend_optimal_buy_window(
+                    price_history=price_hist,
+                    usage_history=usage_hist or [],
+                    coverage_days=burn_metrics.get('days_of_coverage') if burn_metrics else None,
+                    available_stock=burn_metrics.get('available_stock') if burn_metrics else None,
+                    on_order=inventory.get('OnOrder', 0),
+                    today=datetime.date.today(),
+                )
 
                 # Build chatbot context
                 active_chat["context"] = {
@@ -1628,23 +1697,100 @@ try:
                                           delta=f"${delta_val:+,.2f}" if avg_hist_spend > 0 else None, 
                                           delta_color="inverse")
                                 st.markdown("---")
+
+                            # Date range selector (drives both charts below)
+                            min_txn_date = hist_df['TransactionDate'].min().date()
+                            max_txn_date = hist_df['TransactionDate'].max().date()
+                            today = dt.date.today()
+                            yesterday = today - dt.timedelta(days=1)
+                            capped_max_date = max(min_txn_date, min(max_txn_date, yesterday))
+                            range_master_key = f"date_range_{product_item}"
+                            range_price_key = f"{range_master_key}_price"
+                            range_usage_key = f"{range_master_key}_usage"
+                            range_usage_state_key = f"{range_master_key}_usage_state"
+                            range_usage_override_key = f"{range_master_key}_usage_override"
+                            default_range = (min_txn_date, capped_max_date)
+
+                            def _normalize_date_range(val):
+                                if isinstance(val, (list, tuple)) and len(val) == 2:
+                                    start, end = val
+                                    start = start or min_txn_date
+                                    end = end or capped_max_date
+                                    # Clamp within bounds and ensure start <= end
+                                    start = max(min_txn_date, start)
+                                    end = min(capped_max_date, end)
+                                    if start > end:
+                                        start, end = end, start
+                                    return (start, end)
+                                return default_range
+
+                            if range_master_key not in st.session_state:
+                                st.session_state[range_master_key] = default_range
+
+                            # Always clamp any pre-existing state to bounded, day-lagged values
+                            st.session_state[range_master_key] = _normalize_date_range(
+                                st.session_state.get(range_master_key, default_range)
+                            )
+
+                            date_range = st.date_input(
+                                "Adjust date range",
+                                value=st.session_state[range_master_key],
+                                min_value=min_txn_date,
+                                max_value=capped_max_date,
+                                key=range_price_key,
+                            )
+                            normalized_range = _normalize_date_range(date_range)
+                            if tuple(normalized_range) != tuple(st.session_state[range_master_key]):
+                                st.session_state[range_master_key] = normalized_range
+                                if tuple(date_range) != tuple(normalized_range):
+                                    st.rerun()
+                            start_date, end_date = st.session_state[range_master_key]
+
+                            if range_usage_override_key not in st.session_state:
+                                st.session_state[range_usage_override_key] = False
+
+                            st.session_state[range_usage_state_key] = _normalize_date_range(
+                                st.session_state.get(range_usage_state_key, (start_date, end_date))
+                            )
+                            if not st.session_state[range_usage_override_key]:
+                                st.session_state[range_usage_state_key] = (start_date, end_date)
+
+                            filtered_hist_df = hist_df[
+                                (hist_df['TransactionDate'].dt.date >= start_date)
+                                & (hist_df['TransactionDate'].dt.date <= end_date)
+                            ]
                             
                             # Helper to render chart + usage map
-                            def render_price_chart(data_df):
+                            def render_price_chart(
+                                data_df,
+                                start_date=None,
+                                end_date=None,
+                                date_bounds=None,
+                                usage_state_key=None,
+                                usage_override_key=None,
+                                usage_input_key=None,
+                            ):
                                 if data_df.empty:
                                     st.info("No data available.")
                                     return
+
+                                usage_start_dt = pd.to_datetime(start_date) if start_date else pd.NaT
+                                usage_end_dt = pd.to_datetime(end_date) if end_date else pd.NaT
+                                start_dt = usage_start_dt
+                                end_dt = usage_end_dt
 
                                 # Aggregate by date to handle multiple transactions per day
                                 # For RM: Aggregates raw receipts. For FG: Re-aggregates daily summaries (no-op mostly)
                                 chart_data = data_df.groupby('TransactionDate').agg({
                                     'AvgCost': 'mean',
-                                    'TransactionCount': 'sum'
+                                    'TransactionCount': 'sum',
+                                    'Quantity': 'sum'
                                 }).reset_index()
 
                                 # Cast to float to avoid Altair Decimal warnings
                                 chart_data['AvgCost'] = chart_data['AvgCost'].astype(float)
                                 chart_data['TransactionCount'] = chart_data['TransactionCount'].astype(float)
+                                chart_data['Quantity'] = chart_data['Quantity'].astype(float)
 
                                 # Base chart with zoom/pan interaction
                                 base = alt.Chart(chart_data).encode(
@@ -1674,14 +1820,19 @@ try:
                                 )
                                 
                                 # Transaction volume bars (right axis) - Secondary metric
-                                if 'TransactionCount' in chart_data.columns:
+                                if 'Quantity' in chart_data.columns:
                                     volume_bars = base.mark_bar(
                                         opacity=0.3,
                                         color='#859900'
                                     ).encode(
-                                        y=alt.Y('TransactionCount:Q',
-                                               title='Transaction Count',
-                                               axis=alt.Axis(titleColor='#859900'))
+                                        y=alt.Y('Quantity:Q',
+                                               title='Quantity Purchased',
+                                               axis=alt.Axis(titleColor='#859900')),
+                                        tooltip=[
+                                            alt.Tooltip('TransactionDate:T', title='Date', format='%Y-%m-%d'),
+                                            alt.Tooltip('Quantity:Q', title='Qty Purchased', format=',.2f'),
+                                            alt.Tooltip('TransactionCount:Q', title='Transactions', format=',d')
+                                        ]
                                     )
                                     
                                     # Combine with dual axis + interactivity
@@ -1698,15 +1849,52 @@ try:
                                 
                                 st.altair_chart(chart, width="stretch")
 
-                                # Usage map below price chart (12 months) - styled to match pricing chart
-                                price_start = pd.to_datetime(data_df["TransactionDate"].min()).normalize() if "TransactionDate" in data_df.columns else pd.NaT
-                                price_end = pd.to_datetime(data_df["TransactionDate"].max()).normalize() if "TransactionDate" in data_df.columns else pd.NaT
-                                lookback_days = 365
-                                if pd.notna(price_start):
-                                    today = pd.Timestamp.today().normalize()
-                                    lookback_days = max(365, int((today - price_start).days) + 31)
+                                # Usage map below price chart with toggle for all vs monthly rollups
+                                usage_view_key = f"{usage_input_key}_view_mode" if usage_input_key else "usage_view_mode"
+                                if usage_state_key and date_bounds:
+                                    st.markdown("#### Adjust usage date range")
+                                    usage_default = _normalize_date_range(
+                                        st.session_state.get(usage_state_key, date_bounds)
+                                    )
+                                    usage_range = st.date_input(
+                                        "Usage date range",
+                                        value=usage_default,
+                                        min_value=date_bounds[0],
+                                        max_value=date_bounds[1],
+                                        key=usage_input_key,
+                                        label_visibility="collapsed",
+                                    )
+                                    normalized_usage_range = _normalize_date_range(usage_range)
+                                    if tuple(normalized_usage_range) != tuple(st.session_state.get(usage_state_key, usage_default)):
+                                        st.session_state[usage_state_key] = normalized_usage_range
+                                        if tuple(usage_range) != tuple(normalized_usage_range):
+                                            st.rerun()
+                                    start_date, end_date = st.session_state[usage_state_key]
+                                    start_dt = pd.to_datetime(start_date) if start_date else pd.NaT
+                                    end_dt = pd.to_datetime(end_date) if end_date else pd.NaT
 
-                                usage_rows = fetch_product_usage_history(cursor, product_item, days=lookback_days, location=None)
+                                usage_start = start_dt.normalize() if pd.notna(start_dt) else (
+                                    pd.to_datetime(data_df["TransactionDate"].min()).normalize() if "TransactionDate" in data_df.columns else pd.NaT
+                                )
+                                usage_end = end_dt.normalize() if pd.notna(end_dt) else (
+                                    pd.to_datetime(data_df["TransactionDate"].max()).normalize() if "TransactionDate" in data_df.columns else pd.NaT
+                                )
+                                # Fetch a long window so sparse purchase history doesn't hide usage
+                                base_horizon_days = 1825  # ~5 years
+                                if pd.notna(usage_start):
+                                    today = pd.Timestamp.today().normalize()
+                                    days_back = int((today - usage_start).days)
+                                    lookback_days = max(base_horizon_days, days_back + 31)
+                                else:
+                                    lookback_days = base_horizon_days
+
+                                usage_rows = fetch_product_usage_history(
+                                    cursor,
+                                    product_item,
+                                    days=lookback_days,
+                                    location=None,
+                                    group_by="day",
+                                )
                                 if usage_rows and alt:
                                     udf = pd.DataFrame(usage_rows)
                                     if not udf.empty:
@@ -1714,71 +1902,169 @@ try:
                                         udf = udf.map(lambda v: float(v) if isinstance(v, _Decimal) else v)
                                         if "UsageQty" in udf.columns:
                                             udf["UsageQty"] = pd.to_numeric(udf["UsageQty"], errors="coerce")
-                                        udf["UsageDate"] = pd.to_datetime(
-                                            udf[["Year", "Month"]].assign(Day=1), errors="coerce"
-                                        )
-                                        udf = udf.dropna(subset=["UsageDate"])
-
-                                        if pd.notna(price_start) and pd.notna(price_end):
-                                            udf = udf[udf["UsageDate"].between(price_start, price_end)]
-
-                                        if udf.empty:
-                                            st.info("No usage history available.")
-                                            return
-
-                                        x_scale = alt.Scale(domain=[price_start, price_end]) if pd.notna(price_start) and pd.notna(price_end) else alt.Scale()
-
-                                        base = alt.Chart(udf).encode(
-                                            x=alt.X(
-                                                "UsageDate:T",
-                                                title="Date",
-                                                scale=x_scale,
-                                                axis=alt.Axis(labelAngle=-45, labelColor="#555", titleColor="#555", format="%b %Y"),
+                                        if "UsageDate" in udf.columns:
+                                            udf["UsageDate"] = pd.to_datetime(udf["UsageDate"], errors="coerce")
+                                        else:
+                                            udf["UsageDate"] = pd.to_datetime(
+                                                udf[["Year", "Month"]].assign(Day=1), errors="coerce"
                                             )
+                                        udf = udf.dropna(subset=["UsageDate"]).sort_values("UsageDate")
+
+                                        monthly_udf = (
+                                            udf.assign(Year=udf["UsageDate"].dt.year, Month=udf["UsageDate"].dt.month)
+                                            .groupby(["Year", "Month"], as_index=False)["UsageQty"]
+                                            .sum()
                                         )
-                                        bars = base.mark_bar(color="#859900", opacity=0.35).encode(
-                                            y=alt.Y(
-                                                "UsageQty:Q",
-                                                title="Usage Qty",
-                                                axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"),
-                                                scale=alt.Scale(zero=True),
+                                        monthly_udf["UsageDate"] = pd.to_datetime(
+                                            monthly_udf[["Year", "Month"]].assign(Day=1), errors="coerce"
+                                        )
+                                        monthly_udf = monthly_udf.dropna(subset=["UsageDate"]).sort_values("UsageDate")
+
+                                        default_view = st.session_state.get(usage_view_key, "Monthly")
+                                        header_col, toggle_col = st.columns([5, 2])
+                                        with header_col:
+                                            st.markdown("#### Usage History")
+                                        with toggle_col:
+                                            usage_view_mode = st.radio(
+                                                "Usage view",
+                                                ["Monthly", "All"],
+                                                horizontal=True,
+                                                index=0 if default_view == "Monthly" else 1,
+                                                key=usage_view_key,
+                                                label_visibility="collapsed",
                                             )
-                                        )
-                                        line = base.mark_line(
-                                            strokeWidth=3,
-                                            color="#ffb000",
-                                        ).encode(
-                                            y=alt.Y(
-                                                "UsageQty:Q",
-                                                title="Usage Qty",
-                                                axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"),
-                                                scale=alt.Scale(zero=True),
-                                            ),
-                                            tooltip=[
-                                                alt.Tooltip("UsageDate:T", title="Date", format="%b %Y"),
-                                                alt.Tooltip("UsageQty:Q", title="Usage Qty", format=",.0f"),
-                                            ],
-                                        )
-                                        pts = line.mark_point(filled=True, size=80, color="#ffb000")
-                                        usage_chart = (
-                                            alt.layer(bars, line, pts)
-                                            .resolve_scale(y="shared")
-                                            .properties(height=260, title="12-Month Usage")
-                                            .configure_axis(
-                                                gridColor="#e0e0e0",
-                                                domainColor="#cccccc",
-                                                tickColor="#cccccc",
+
+                                        if usage_view_mode == "Monthly":
+                                            range_notice = None
+                                            filtered_udf = monthly_udf
+                                            if pd.notna(usage_start) and pd.notna(usage_end):
+                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"].between(usage_start, usage_end)]
+                                                if filtered_udf.empty:
+                                                    filtered_udf = monthly_udf
+                                                    range_notice = "No usage in the selected range; showing all available usage."
+                                            elif pd.notna(usage_start):
+                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"] >= usage_start]
+                                                if filtered_udf.empty:
+                                                    filtered_udf = monthly_udf
+                                                    range_notice = "No usage after the selected start; showing all available usage."
+                                            elif pd.notna(usage_end):
+                                                filtered_udf = monthly_udf[monthly_udf["UsageDate"] <= usage_end]
+                                                if filtered_udf.empty:
+                                                    filtered_udf = monthly_udf
+                                                    range_notice = "No usage before the selected end; showing all available usage."
+
+                                            if filtered_udf.empty:
+                                                st.info("No usage history available.")
+                                                return
+
+                                            x_domain = None
+                                            if range_notice is None and pd.notna(usage_start) and pd.notna(usage_end):
+                                                x_domain = [usage_start, usage_end]
+                                            elif not filtered_udf.empty:
+                                                x_domain = [
+                                                    filtered_udf["UsageDate"].min(),
+                                                    filtered_udf["UsageDate"].max(),
+                                                ]
+                                            x_scale = alt.Scale(domain=x_domain) if x_domain else alt.Scale()
+
+                                            base = alt.Chart(filtered_udf).encode(
+                                                x=alt.X("UsageDate:T", title="Date", scale=x_scale, axis=alt.Axis(labelAngle=-45, labelColor="#555", titleColor="#555", format="%b %Y"),)
                                             )
-                                            .configure_title(color="#555")
-                                            .configure_view(stroke="#e0e0e0", strokeWidth=1)
-                                            .configure(background="#ffffff")
-                                        )
-                                        st.altair_chart(usage_chart, width="stretch")
+                                            bars = base.mark_bar(color="#859900", opacity=0.35).encode(
+                                                y=alt.Y("UsageQty:Q", title="Usage Qty", axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"), scale=alt.Scale(zero=True),)
+                                            )
+                                            line = base.mark_line(strokeWidth=3, color="#ffb000").encode(
+                                                y=alt.Y("UsageQty:Q", title="Usage Qty", axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"), scale=alt.Scale(zero=True),),
+                                                tooltip=[
+                                                    alt.Tooltip("UsageDate:T", title="Date", format="%b %Y"),
+                                                    alt.Tooltip("UsageQty:Q", title="Usage Qty", format=",.0f"),
+                                                ],
+                                            )
+                                            pts = line.mark_point(filled=True, size=80, color="#ffb000")
+                                            usage_chart = (
+                                                alt.layer(bars, line, pts)
+                                                .resolve_scale(y="shared")
+                                                .properties(height=260, title="Monthly Usage")
+                                                .configure_axis(
+                                                    gridColor="#e0e0e0",
+                                                    domainColor="#cccccc",
+                                                    tickColor="#cccccc",
+                                                )
+                                                .configure_title(color="#555")
+                                                .configure_view(stroke="#e0e0e0", strokeWidth=1)
+                                                .configure(background="#ffffff")
+                                                .interactive()
+                                            )
+                                            if range_notice:
+                                                st.caption(range_notice)
+                                            st.altair_chart(usage_chart, width="stretch")
+                                        else:
+                                            range_notice = None
+                                            filtered_daily = udf
+                                            if pd.notna(usage_start) and pd.notna(usage_end):
+                                                ranged = udf[udf["UsageDate"].between(usage_start, usage_end)]
+                                                if not ranged.empty:
+                                                    filtered_daily = ranged
+                                                else:
+                                                    range_notice = "No usage in the selected range; showing all available usage."
+                                            elif pd.notna(usage_start):
+                                                ranged = udf[udf["UsageDate"] >= usage_start]
+                                                if not ranged.empty:
+                                                    filtered_daily = ranged
+                                                else:
+                                                    range_notice = "No usage after the selected start; showing all available usage."
+                                            elif pd.notna(usage_end):
+                                                ranged = udf[udf["UsageDate"] <= usage_end]
+                                                if not ranged.empty:
+                                                    filtered_daily = ranged
+                                                else:
+                                                    range_notice = "No usage before the selected end; showing all available usage."
+
+                                            if filtered_daily.empty:
+                                                st.info("No usage history available.")
+                                                return
+
+                                            x_domain = [
+                                                filtered_daily["UsageDate"].min(),
+                                                filtered_daily["UsageDate"].max(),
+                                            ]
+                                            x_scale = alt.Scale(domain=x_domain) if x_domain else alt.Scale()
+
+                                            base = alt.Chart(filtered_daily).encode(
+                                                x=alt.X("UsageDate:T", title="Date", scale=x_scale, axis=alt.Axis(labelAngle=-45, labelColor="#555", titleColor="#555", format="%b %d, %Y"),)
+                                            )
+                                            bars = base.mark_bar(color="#859900", opacity=0.25).encode(
+                                                y=alt.Y("UsageQty:Q", title="Usage Qty", axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"), scale=alt.Scale(zero=True),)
+                                            )
+                                            line = base.mark_line(strokeWidth=2, color="#ffb000").encode(
+                                                y=alt.Y("UsageQty:Q", title="Usage Qty", axis=alt.Axis(format=",.0f", labelColor="#555", titleColor="#555"), scale=alt.Scale(zero=True),),
+                                                tooltip=[
+                                                    alt.Tooltip("UsageDate:T", title="Date", format="%Y-%m-%d"),
+                                                    alt.Tooltip("UsageQty:Q", title="Usage Qty", format=",.0f"),
+                                                ],
+                                            )
+                                            pts = line.mark_point(filled=True, size=55, color="#ffb000")
+                                            usage_chart = (
+                                                alt.layer(bars, line, pts)
+                                                .resolve_scale(y="shared")
+                                                .properties(height=260, title="All Usage (Daily)")
+                                                .configure_axis(
+                                                    gridColor="#e0e0e0",
+                                                    domainColor="#cccccc",
+                                                    tickColor="#cccccc",
+                                                )
+                                                .configure_title(color="#555")
+                                                .configure_view(stroke="#e0e0e0", strokeWidth=1)
+                                                .configure(background="#ffffff")
+                                                .interactive()
+                                            )
+                                            if range_notice:
+                                                st.caption(range_notice)
+                                            st.altair_chart(usage_chart, width="stretch")
                                     else:
                                         st.info("No usage history available.")
                                 else:
                                     st.info("No usage history available.")
-
                             # Vendor Tabs Logic
                             if 'VendorName' in hist_df.columns:
                                 # Get unique vendors (exclude empty/None)
@@ -1790,17 +2076,49 @@ try:
                                     
                                     # Render for ALL
                                     with tabs[0]:
-                                        render_price_chart(hist_df)
+                                        render_price_chart(
+                                            filtered_hist_df,
+                                            start_date,
+                                            end_date,
+                                            date_bounds=default_range,
+                                            usage_state_key=range_usage_state_key,
+                                            usage_override_key=range_usage_override_key,
+                                            usage_input_key=range_usage_key,
+                                        )
                                         
                                     # Render for each Vendor
                                     for i, vendor in enumerate(vendors):
                                         with tabs[i+1]:
-                                            vendor_df = hist_df[hist_df['VendorName'] == vendor]
-                                            render_price_chart(vendor_df)
+                                            vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == vendor]
+                                            render_price_chart(
+                                                vendor_df,
+                                                start_date,
+                                                end_date,
+                                                date_bounds=default_range,
+                                                usage_state_key=range_usage_state_key,
+                                                usage_override_key=range_usage_override_key,
+                                                usage_input_key=f"{range_usage_key}_{vendor}",
+                                            )
                                 else:
-                                    render_price_chart(hist_df)
+                                    render_price_chart(
+                                        filtered_hist_df,
+                                        start_date,
+                                        end_date,
+                                        date_bounds=default_range,
+                                        usage_state_key=range_usage_state_key,
+                                        usage_override_key=range_usage_override_key,
+                                        usage_input_key=range_usage_key,
+                                    )
                             else:
-                                render_price_chart(hist_df)
+                                render_price_chart(
+                                    filtered_hist_df,
+                                    start_date,
+                                    end_date,
+                                    date_bounds=default_range,
+                                    usage_state_key=range_usage_state_key,
+                                    usage_override_key=range_usage_override_key,
+                                    usage_input_key=range_usage_key,
+                                )
                     else:
                         st.info("NO HISTORICAL DATA AVAILABLE")
 
@@ -1833,7 +2151,7 @@ try:
                 with inv_col4:
                     st.metric("ON ORDER", f"{inventory.get('OnOrder', 0):,.0f}")
 
-                burn_col1, burn_col2, burn_col3 = st.columns(3)
+                burn_col1, burn_col2, burn_col3, burn_col4 = st.columns(4)
                 seasonal_burn = burn_metrics.get('seasonal_burn_rate', 0) if burn_metrics else 0
                 seasonal_factor = burn_metrics.get('seasonal_factor', 1) if burn_metrics else 1
                 decayed_daily_usage = burn_metrics.get('decayed_daily_usage', 0) if burn_metrics else 0
@@ -1850,6 +2168,26 @@ try:
                     st.metric("AVG USAGE/DAY", f"{decayed_daily_usage:,.1f}", delta=f"{base_daily_usage:,.1f} raw avg")
                 with burn_col3:
                     st.metric("DAYS OF USAGE LEFT", coverage_display, delta=f"Stock: {available_stock:,.0f}")
+                buy_caption = None
+                with burn_col4:
+                    if optimal_buy and optimal_buy.get('status') != 'insufficient':
+                        buy_days = int(optimal_buy.get('days_from_now', 0))
+                        buy_date = optimal_buy.get('buy_date')
+                        date_label = buy_date.strftime("%b %d") if isinstance(buy_date, (datetime.date, datetime.datetime)) else f"In {buy_days}d"
+                        expected_price = float(optimal_buy.get('expected_price', 0))
+                        price_delta = float(optimal_buy.get('price_delta', 0))
+                        st.metric(
+                            "OPTIMAL BUY WINDOW",
+                            f"{date_label} ({buy_days}d)",
+                            delta=f"${expected_price:,.2f} est ({price_delta:+,.2f} vs now)"
+                        )
+                        buy_caption = optimal_buy.get('reason')
+                    else:
+                        st.metric("OPTIMAL BUY WINDOW", "N/A", delta="Need more history")
+                        buy_caption = optimal_buy.get('reason') if optimal_buy else None
+
+                if buy_caption:
+                    st.caption(f"Buy timing model: {buy_caption}")
                 st.caption("Burn rate uses on-hand + on-order, weighted for current season with decayed material usage.")
 
 

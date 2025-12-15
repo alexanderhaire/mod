@@ -5,6 +5,7 @@ import datetime
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyodbc
 
@@ -106,6 +107,13 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                     else:
                         norm_cost = unit_cost
                         
+                    # Calculate Quantity based on Cost
+                    # Quantity (Purchase UofM) = EXTDCOST / UNITCOST
+                    # Quantity (Base UofM) = Quantity (Purchase) * UMQTYINB
+                    qty_purchased = 0
+                    if unit_cost > 0:
+                         qty_purchased = (ext_cost / unit_cost) * qty_in_base
+                    
                     history.append({
                         'TransactionDate': r['TransactionDate'],
                         'AvgCost': norm_cost, # Normalized cost
@@ -114,7 +122,8 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                         'UofM': str(r.get('UOFM', '')).strip(),
                         'OriginalCost': unit_cost,
                         'ExtendedCost': ext_cost,
-                        'TransactionCount': 1
+                        'TransactionCount': 1,
+                        'Quantity': qty_purchased
                     })
             else:
                 # Fallback: If no purchase history found (e.g. manufactured RM, or old stock), 
@@ -129,7 +138,8 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
             SELECT 
                 CAST(h.DOCDATE AS DATE) as TransactionDate,
                 AVG(t.UNITCOST) as AvgCost,
-                COUNT(*) as TransactionCount
+                COUNT(*) as TransactionCount,
+                SUM(t.TRXQTY) as Quantity
             FROM IV30300 t
             JOIN IV30200 h ON t.DOCNUMBR = h.DOCNUMBR AND t.DOCTYPE = h.IVDOCTYP
             WHERE t.ITEMNMBR = ?
@@ -148,6 +158,7 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 for row in history_rows:
                     r = dict(zip(hist_columns, row))
                     r['AvgCost'] = float(r.get('AvgCost') or 0)
+                    r['Quantity'] = float(r.get('Quantity') or 0)
                     history.append(r)
         
         # Return real data only - no synthetic fallback
@@ -244,30 +255,61 @@ def fetch_product_usage_history(
     days: int = 180,
     location: str | None = PRIMARY_LOCATION,
     fallback_all_locations: bool = True,
+    group_by: str = "month",
 ) -> list[dict[str, Any]]:
     """
     Fetch usage/consumption history for a product from inventory transactions.
+    
+    Args:
+        cursor: Database cursor.
+        item_number: Item to fetch history for.
+        days: Lookback window.
+        location: Optional location filter.
+        fallback_all_locations: Whether to retry without location on empty result.
+        group_by: "month" (default) for monthly aggregates or "day" for daily detail.
     """
     try:
         end_date = datetime.date.today()
         start_date = end_date - datetime.timedelta(days=days)
+
+        group_by_mode = (group_by or "month").lower()
+        group_by_month = group_by_mode != "day"
         
-        location_clause = "AND t.LOCNCODE = ?" if location else ""
-        query = f"""
-        SELECT 
+        if group_by_month:
+            select_clause = """
             YEAR(h.DOCDATE) as Year,
             MONTH(h.DOCDATE) as Month,
             SUM(CASE WHEN t.TRXQTY < 0 THEN -t.TRXQTY ELSE 0 END) as UsageQty,
             SUM(CASE WHEN t.TRXQTY > 0 THEN t.TRXQTY ELSE 0 END) as ReceiptQty,
             COUNT(*) as TransactionCount
+            """
+            group_clause = "GROUP BY YEAR(h.DOCDATE), MONTH(h.DOCDATE)"
+            order_clause = "ORDER BY Year, Month"
+        else:
+            select_clause = """
+            YEAR(h.DOCDATE) as Year,
+            MONTH(h.DOCDATE) as Month,
+            DAY(h.DOCDATE) as Day,
+            h.DOCDATE as UsageDate,
+            SUM(CASE WHEN t.TRXQTY < 0 THEN -t.TRXQTY ELSE 0 END) as UsageQty,
+            SUM(CASE WHEN t.TRXQTY > 0 THEN t.TRXQTY ELSE 0 END) as ReceiptQty,
+            COUNT(*) as TransactionCount
+            """
+            group_clause = "GROUP BY YEAR(h.DOCDATE), MONTH(h.DOCDATE), DAY(h.DOCDATE), h.DOCDATE"
+            order_clause = "ORDER BY UsageDate"
+        
+        location_clause = "AND t.LOCNCODE = ?" if location else ""
+        query = f"""
+        SELECT 
+            {select_clause}
         FROM IV30300 t
         JOIN IV30200 h ON t.DOCNUMBR = h.DOCNUMBR AND t.DOCTYPE = h.IVDOCTYP
         WHERE t.ITEMNMBR = ?
             {location_clause}
             AND h.DOCDATE >= ?
             AND h.DOCDATE <= ?
-        GROUP BY YEAR(h.DOCDATE), MONTH(h.DOCDATE)
-        ORDER BY Year, Month
+        {group_clause}
+        {order_clause}
         """
         
         params = [item_number]
@@ -291,6 +333,9 @@ def fetch_product_usage_history(
             month_num = record.get('Month', 1)
             record['MonthName'] = calendar.month_name[month_num] if 1 <= month_num <= 12 else 'Unknown'
             record['ITEMNMBR'] = item_number
+            if not group_by_month and 'UsageDate' in record and record['UsageDate']:
+                # Preserve date for charting; pyodbc can return date or datetime
+                record['UsageDate'] = record['UsageDate']
         
         return usage_data
         
@@ -402,72 +447,109 @@ def get_product_details(cursor: pyodbc.Cursor, item_number: str) -> dict[str, An
     }
 
 
-def calculate_buying_signals(cursor: pyodbc.Cursor, item_number: str) -> dict[str, Any]:
+def calculate_buying_signals(cursor: pyodbc.Cursor, item_number: str, runway_days: float | None = None) -> dict[str, Any]:
     """
-    Analyze price history to determine if now is a good time to buy.
+    Analyze price history AND inventory status to determine if now is a good time to buy.
     Returns a score (0-100) and reasoning.
+    
+    Weighting Strategy:
+    - 80% Inventory Score (Lower Runway = Higher Urgency)
+    - 20% Price Score (Lower Price percentile = Higher Opportunity)
     """
     try:
-        # Get price history (last 2 years to be safe)
+        # 1. Price Score Calculation (0-100)
+        # Get price history (last 2 years)
         history = fetch_product_price_history(cursor, item_number, days=730)
-        if not history:
-            return {'score': 0, 'signal': 'Neutral', 'reason': 'No price history available'}
-
-        # Extract costs and dates
-        costs = [float(r['AvgCost']) for r in history if r.get('AvgCost')]
-        if not costs:
-            return {'score': 0, 'signal': 'Neutral', 'reason': 'No cost data available'}
-
-        current_cost = costs[-1]
         
-        # Calculate averages
-        avg_6mo = sum(costs[-6:]) / len(costs[-6:]) if len(costs) >= 6 else sum(costs) / len(costs)
-        avg_12mo = sum(costs[-12:]) / len(costs[-12:]) if len(costs) >= 12 else sum(costs) / len(costs)
+        price_score = 50
+        price_reason = "Price is stable."
+        current_cost = 0
+        avg_6mo = 0
+        avg_12mo = 0
+        percentile = 50
         
-        # Calculate percentile (where does current price sit in last 2 years?)
-        sorted_costs = sorted(costs)
-        # Use bisect_left for safe index finding (handles floating-point comparison)
-        rank = bisect.bisect_left(sorted_costs, current_cost)
-        percentile = (rank / len(costs)) * 100
+        if history and len(history) >= 1:
+            costs = [float(r['AvgCost']) for r in history if r.get('AvgCost')]
+            if costs:
+                current_cost = costs[-1]
+                avg_6mo = sum(costs[-6:]) / len(costs[-6:]) if len(costs) >= 6 else sum(costs) / len(costs)
+                avg_12mo = sum(costs[-12:]) / len(costs[-12:]) if len(costs) >= 12 else sum(costs) / len(costs)
+                
+                sorted_costs = sorted(costs)
+                rank = bisect.bisect_left(sorted_costs, current_cost)
+                percentile = (rank / len(costs)) * 100
+                
+                # Percentile Logic
+                reasons = []
+                if percentile < 10:
+                    price_score += 40
+                    reasons.append("Price is in the bottom 10%.")
+                elif percentile < 25:
+                    price_score += 20
+                    reasons.append("Price is in the bottom 25%.")
+                elif percentile > 90:
+                    price_score -= 30
+                    reasons.append("Price is high (>90th pct).")
+                    
+                # Moving Average Logic
+                if current_cost < avg_6mo:
+                    price_score += 10
+                else:
+                    price_score -= 10
+                    
+                price_score = max(0, min(100, price_score))
+                if reasons:
+                    price_reason = " ".join(reasons)
         
-        score = 50 # Start neutral
-        reasons = []
-
-        # Logic: Lower percentile is better
-        if percentile < 10:
-            score += 40
-            reasons.append("Price is in the bottom 10% of last 2 years.")
-        elif percentile < 25:
-            score += 20
-            reasons.append("Price is in the bottom 25% of last 2 years.")
-        elif percentile > 90:
-            score -= 30
-            reasons.append("Price is near 2-year high.")
+        # 2. Inventory Score Calculation (0-100)
+        # If runway_days is not provided, fetch it
+        if runway_days is None:
+            # We don't want to infinite loop if this function is called inside runway calc, 
+            # but usually runway calc calls simple logic. 
+            # Safest is to calculate if missing.
+            from market_insights import calculate_inventory_runway
+            runway_data = calculate_inventory_runway(cursor, item_number)
+            runway_days = runway_data.get('runway_days', 999)
             
-        # Logic: Compare to moving averages
-        if current_cost < avg_6mo:
-            score += 10
-            reasons.append(f"Below 6-month average ({avg_6mo:.2f}).")
+        inv_score = 0
+        inv_reason = ""
+        
+        if runway_days < 30:
+            inv_score = 100
+            inv_reason = f"Critical low stock ({runway_days:.0f}d)."
+        elif runway_days < 60:
+            inv_score = 75
+            inv_reason = f"Low stock ({runway_days:.0f}d)."
+        elif runway_days < 90:
+            inv_score = 50
+            inv_reason = f"Adequate stock ({runway_days:.0f}d)."
         else:
-            score -= 10
+            inv_score = 25 # Low urgency
+            inv_reason = "High stock levels."
             
-        if current_cost < avg_12mo:
-            score += 10
-            reasons.append(f"Below 12-month average ({avg_12mo:.2f}).")
-            
-        # Cap score
-        score = max(0, min(100, score))
+        # 3. Final Weighted Score
+        # User requested 80% weight on Inventory, 20% on Price
+        weighted_score = (inv_score * 0.8) + (price_score * 0.2)
         
-        signal = "Strong Buy" if score >= 80 else "Buy" if score >= 60 else "Hold" if score >= 40 else "Wait"
+        signal = "Strong Buy" if weighted_score >= 80 else "Buy" if weighted_score >= 60 else "Hold" if weighted_score >= 40 else "Wait"
         
+        final_reasons = []
+        if inv_score > 50:
+             final_reasons.append(inv_reason)
+        if price_score > 50:
+             final_reasons.append(price_reason)
+        if not final_reasons:
+             final_reasons.append("Conditions normal.")
+             
         return {
-            'score': score,
+            'score': weighted_score,
             'signal': signal,
             'current_cost': current_cost,
             'avg_6mo': avg_6mo,
             'avg_12mo': avg_12mo,
             'percentile': percentile,
-            'reason': " ".join(reasons) if reasons else "Price is stable."
+            'reason': " ".join(final_reasons),
+            'subscores': {'inventory': inv_score, 'price': price_score}
         }
         
     except Exception as e:
@@ -766,6 +848,251 @@ def calculate_seasonal_burn_metrics(
         'days_of_coverage': days_of_coverage,
         'available_stock': available_stock,
     }
+
+
+def _prepare_daily_usage_series(usage_history: list[dict[str, Any]]) -> pd.DataFrame:
+    """
+    Normalize usage history into a daily time series for modeling.
+
+    Returns a DataFrame with Date and daily_usage columns. Falls back to an empty
+    DataFrame when data is missing so callers can handle insufficiency gracefully.
+    """
+    if not usage_history:
+        return pd.DataFrame()
+
+    usage_df = pd.DataFrame(usage_history)
+    if usage_df.empty or 'UsageQty' not in usage_df.columns:
+        return pd.DataFrame()
+
+    working = usage_df.copy()
+    if 'UsageDate' in working.columns:
+        working['Date'] = pd.to_datetime(working['UsageDate'], errors='coerce')
+        working['daily_usage'] = pd.to_numeric(working['UsageQty'], errors='coerce')
+    elif {'Year', 'Month'}.issubset(working.columns):
+        # Monthly aggregates – convert to daily rate using days in month
+        def _daily_from_month(row) -> float:
+            try:
+                year = int(row.get('Year'))
+                month = int(row.get('Month'))
+                days_in_month = calendar.monthrange(year, month)[1] or 1
+                return float(row.get('UsageQty', 0) or 0) / days_in_month
+            except Exception:
+                return 0.0
+
+        working['Date'] = pd.to_datetime(
+            working[['Year', 'Month']].assign(Day=1), errors='coerce'
+        )
+        working['daily_usage'] = working.apply(_daily_from_month, axis=1)
+    else:
+        return pd.DataFrame()
+
+    working = working.dropna(subset=['Date', 'daily_usage'])
+    return working[['Date', 'daily_usage']].sort_values('Date')
+
+
+def recommend_optimal_buy_window(
+    price_history: list[dict[str, Any]],
+    usage_history: list[dict[str, Any]],
+    coverage_days: float | None = None,
+    available_stock: float | None = None,
+    today: datetime.date | None = None,
+    on_order: float | None = None,
+) -> dict[str, Any]:
+    """
+    Recommend the best day (within remaining coverage) to place a buy.
+
+    Uses a lightweight linear regression on historical prices to forecast daily
+    prices, and a usage trend line to keep the recommendation inside the safety
+    window before stock-out. This keeps the recommendation local (no external
+    services) while still using learned trends instead of fixed thresholds.
+    The window start is delayed when coverage/on-order are high to avoid
+    recommending an immediate buy unless the price trend justifies it.
+    """
+    today = today or datetime.date.today()
+
+    if not price_history:
+        return {
+            'status': 'insufficient',
+            'reason': 'No price history available',
+            'days_from_now': 0,
+            'expected_price': 0.0,
+            'current_price': 0.0,
+            'price_delta': 0.0,
+            'latest_safe_day': 0,
+            'confidence': 0.0,
+        }
+
+    price_df = pd.DataFrame(price_history)
+    if price_df.empty or 'TransactionDate' not in price_df.columns or 'AvgCost' not in price_df.columns:
+        return {
+            'status': 'insufficient',
+            'reason': 'Missing price fields',
+            'days_from_now': 0,
+            'expected_price': 0.0,
+            'current_price': 0.0,
+            'price_delta': 0.0,
+            'latest_safe_day': 0,
+            'confidence': 0.0,
+        }
+
+    price_df['TransactionDate'] = pd.to_datetime(price_df['TransactionDate'], errors='coerce')
+    price_df['AvgCost'] = pd.to_numeric(price_df['AvgCost'], errors='coerce')
+    price_df = price_df.dropna(subset=['TransactionDate', 'AvgCost']).sort_values('TransactionDate')
+    if price_df.empty:
+        return {
+            'status': 'insufficient',
+            'reason': 'Unusable price records',
+            'days_from_now': 0,
+            'expected_price': 0.0,
+            'current_price': 0.0,
+            'price_delta': 0.0,
+            'latest_safe_day': 0,
+            'confidence': 0.0,
+        }
+
+    base_price_date = price_df['TransactionDate'].min()
+    price_df['t'] = (price_df['TransactionDate'] - base_price_date).dt.days
+    current_price = float(price_df['AvgCost'].iloc[-1])
+
+    if price_df['t'].nunique() >= 2:
+        slope, intercept = np.polyfit(price_df['t'], price_df['AvgCost'], 1)
+    else:
+        slope, intercept = 0.0, current_price
+
+    today_t = int(max(price_df['t'].max(), (pd.Timestamp(today) - base_price_date).days))
+
+    # Usage trend to keep recommendation inside a safe window
+    usage_df = _prepare_daily_usage_series(usage_history)
+    base_daily_usage = float(usage_df['daily_usage'].mean()) if not usage_df.empty else 0.0
+    usage_slope = 0.0
+    if not usage_df.empty:
+        usage_df['t'] = (usage_df['Date'] - usage_df['Date'].min()).dt.days
+        if usage_df['t'].nunique() >= 2:
+            usage_slope, usage_intercept = np.polyfit(usage_df['t'], usage_df['daily_usage'], 1)
+            base_daily_usage = max(base_daily_usage, float(usage_intercept))
+
+    if base_daily_usage == 0 and coverage_days and available_stock:
+        base_daily_usage = float(available_stock) / max(float(coverage_days), 1.0)
+
+    available_stock_val = float(available_stock or 0.0)
+    horizon = int(max(7, min(int(coverage_days) if coverage_days else 90, 180)))
+    future_days = np.arange(0, horizon + 1)
+    future_t = today_t + future_days
+
+    pred_prices = np.clip(intercept + slope * future_t, a_min=0.0, a_max=None)
+
+    # Estimate when we run out, factoring in usage trend
+    def _cumulative_usage(day: int) -> float:
+        # Sum of arithmetic series for rising/falling usage: u0*d + 0.5*slope*d*(d+1)
+        return max(0.0, (base_daily_usage * day) + 0.5 * usage_slope * day * (day + 1))
+
+    stockout_day = None
+    if available_stock_val > 0 and base_daily_usage > 0:
+        for d in future_days:
+            if _cumulative_usage(int(d)) >= available_stock_val:
+                stockout_day = int(d)
+                break
+
+    if stockout_day is None and coverage_days:
+        stockout_day = int(coverage_days)
+    if stockout_day is None:
+        stockout_day = horizon
+
+    safety_buffer = 3 if stockout_day < 45 else 7
+    latest_day = max(0, min(stockout_day, horizon) - safety_buffer)
+
+    min_start_day = 0
+    coverage_for_delay = coverage_days if coverage_days is not None else stockout_day
+    if coverage_for_delay and coverage_for_delay > 30:
+        extra_coverage = coverage_for_delay - 30
+        min_start_day = min(
+            latest_day,
+            max(min_start_day, int(round(extra_coverage * 0.35)))
+        )
+
+    on_order_days = None
+    if on_order is not None and base_daily_usage > 0:
+        on_order_days = float(on_order) / max(base_daily_usage, 1e-6)
+        if on_order_days > 7:
+            min_start_day = min(
+                latest_day,
+                max(min_start_day, int(round(on_order_days * 0.25)))
+            )
+
+    if slope < 0:
+        min_start_day = max(0, min_start_day - 3)
+
+    min_start_day = min(min_start_day, latest_day)
+
+    mask = (future_days >= min_start_day) & (future_days <= latest_day)
+    if not mask.any():
+        mask = future_days <= min(stockout_day, horizon)
+
+    candidates = future_days[mask]
+    candidate_prices = pred_prices[mask]
+
+    if candidates.size == 0:
+        best_day = 0
+        expected_price = current_price
+    else:
+        # User requested 80% weight on Inventory (Safety) and 20% on Price
+        # Inventory Score: Buying earlier is safer (1.0 at day 0, 0.0 at latest_day)
+        # Price Score: Lower price is better (1.0 at min_price, 0.0 at max_price)
+        
+        # 1. Calculate Price Score
+        min_p = candidate_prices.min()
+        max_p = candidate_prices.max()
+        price_range = max_p - min_p
+        
+        if price_range > 0:
+            price_scores = 1.0 - ((candidate_prices - min_p) / price_range)
+        else:
+            price_scores = np.ones_like(candidate_prices) # All prices same -> Score 1.0
+            
+        # 2. Calculate Inventory Score (Safety)
+        # Normalize day 0 to latest_day
+        day_range = latest_day - min_start_day
+        if day_range > 0:
+             # Earlier days = Higher Safety Score
+             inventory_scores = 1.0 - ((candidates - min_start_day) / day_range)
+        else:
+             inventory_scores = np.ones_like(candidates)
+             
+        # 3. Combined Weighted Score
+        # 80% Inventory, 20% Price
+        final_scores = (0.8 * inventory_scores) + (0.2 * price_scores)
+        
+        # 4. Pick Best Day
+        best_idx = int(np.argmax(final_scores))
+        best_day = int(candidates[best_idx])
+        expected_price = float(candidate_prices[best_idx])
+
+    buy_date = today + datetime.timedelta(days=best_day)
+    trend_direction = "down" if slope < 0 else "up" if slope > 0 else "flat"
+
+    volatility = float(price_df['AvgCost'].std() or 0.0)
+    stability = 1 / (1 + (volatility / (current_price + 1e-6)))
+    confidence = max(0.25, min(0.95, (len(price_df) / 24) * stability))
+
+    reason = (
+        f"Price trend {trend_direction} with projected ${expected_price:,.2f} at day {best_day}; "
+        f"keeps {safety_buffer}d buffer before stock-out at ~day {stockout_day}."
+    )
+    if min_start_day > 0:
+        reason += f" Window starts at day {min_start_day} to use existing coverage/on-order."
+
+    return {
+        'status': 'ok',
+        'days_from_now': best_day,
+        'buy_date': buy_date,
+        'expected_price': round(expected_price, 2),
+        'current_price': round(current_price, 2),
+        'price_delta': round(expected_price - current_price, 2),
+        'latest_safe_day': int(latest_day),
+        'confidence': round(confidence, 2),
+        'trend_direction': trend_direction,
+        'reason': reason,
+    }
 def get_batch_volatility_scores(cursor: pyodbc.Cursor, limit: int = 50) -> list[dict[str, Any]]:
     """
     Calculate price volatility for all raw materials in a single batch query.
@@ -945,6 +1272,7 @@ def get_priority_raw_materials(
     limit: int = 25,
     location: str | None = PRIMARY_LOCATION,
     fallback_all_locations: bool = True,
+    require_purchase_history: bool = False,
 ) -> pd.DataFrame:
     """
     Identify high-priority raw materials that a purchasing analyst should focus on.
@@ -955,9 +1283,22 @@ def get_priority_raw_materials(
     3. Has purchase history (bought from vendors)
     4. Sorted by total annual spend (cost * usage)
     
-    Returns a DataFrame of priority items with their analytics.
+    Args:
+        require_purchase_history: If True, STRICTLY enforces that the item must have 
+                                  been purchased in the last 2 years (PurchaseCount > 0).
     """
     try:
+        # Dynamic filter for purchase history
+        # Default behavior (False): (Usage > 0 OR Purchase > 0)
+        # Strict behavior (True): AND PurchaseCount > 0
+        
+        purchase_filter = ""
+        if require_purchase_history:
+             purchase_filter = "AND p.PurchaseCount > 0"
+
+        # Lookback Period (User requested 2.5 years)
+        months_back = -30 if require_purchase_history else -24
+
         # Query raw materials with actual purchasing activity
         query = f"""
         WITH RecentUsage AS (
@@ -977,14 +1318,17 @@ def get_priority_raw_materials(
                 COUNT(*) as PurchaseCount
             FROM POP30310 l
             JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
-            WHERE h.RECEIPTDATE >= DATEADD(year, -2, GETDATE())
+            WHERE h.RECEIPTDATE >= DATEADD(month, {months_back}, GETDATE())
+              AND h.VENDORID IS NOT NULL 
+              AND RTRIM(h.VENDORID) <> ''
             GROUP BY l.ITEMNMBR
         )
-        SELECT TOP {limit}
+        SELECT TOP {limit if limit else 5000}
             i.ITEMNMBR,
             RTRIM(i.ITEMDESC) as ITEMDESC,
             i.CURRCOST,
             i.STNDCOST,
+            RTRIM(i.ITMCLSCD) as ITMCLSCD,
             RTRIM(i.USCATVLS_1) as Category,
             i.ITEMTYPE,
             ISNULL(u.UsageQty180, 0) as UsageQty180,
@@ -1000,11 +1344,15 @@ def get_priority_raw_materials(
             -- Strict Raw Material Definition (Item Class Codes)
             {RAW_MATERIAL_CLASS_FILTER_SQL}
             AND i.CURRCOST > 0.01
+            -- EXCLUDE Receiving/Intermediate Items (User Feedback)
+            AND i.ITEMNMBR NOT LIKE 'REC-%'
+            AND i.ITEMNMBR NOT LIKE 'PMX%'
             AND (
                 -- Has recent usage OR recent purchases
                 u.UsageQty180 > 0
                 OR p.PurchaseCount > 0
             )
+            {purchase_filter}
         ORDER BY 
             -- Prioritize by annual spend AND recent activity
             CASE WHEN u.UsageQty180 > 0 THEN 1 ELSE 2 END,
@@ -1028,8 +1376,9 @@ def get_priority_raw_materials(
         df['CURRCOST'] = pd.to_numeric(df['CURRCOST'], errors='coerce')
         df['STNDCOST'] = pd.to_numeric(df['STNDCOST'], errors='coerce')
 
-        # Add segment classification
-        df['Segment'] = 'Raw Material'
+        # Add segment classification using the same logic as the market monitor
+        df['ITMCLSCD'] = df['ITMCLSCD'].fillna('').astype(str).str.strip()
+        df['Segment'] = df['ITMCLSCD'].apply(classify_item_segment)
 
         # Calculate % change safely (fallback to 0 when standard cost is missing/zero)
         df['PctChange'] = 0.0
@@ -1089,7 +1438,7 @@ def get_items_needing_attention(cursor: pyodbc.Cursor, df_items: pd.DataFrame) -
             priority += 50
         
         # Check buying signals
-        signals = calculate_buying_signals(cursor, item_num)
+        signals = calculate_buying_signals(cursor, item_num, runway_days=runway_days)
         score = signals.get('score', 50)
         
         if score >= 80:
