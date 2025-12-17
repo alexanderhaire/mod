@@ -65,6 +65,35 @@ def fetch_agricultural_market_data(product_category: str, timeframe: str = '1y')
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
+def fetch_market_data_pool(universe: list[str], timeframe: str = '1y') -> dict[str, dict[str, Any]]:
+    """
+    Fetch market data for a list of commodities (futures universe).
+    Returns a dictionary mapping commodity name to its data dict.
+    """
+    pool_data = {}
+    
+    # Use parallel execution to speed up the "Cold Start" 
+    # (Fetching 50+ items sequentially would take 2+ minutes)
+    import concurrent.futures
+    
+    def fetch_item(item):
+        try:
+            return item, fetch_agricultural_market_data(item, timeframe)
+        except Exception:
+            return item, None
+
+    # Max workers = 10 to be respectful of rate limits but fast
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_item = {executor.submit(fetch_item, item): item for item in universe}
+        for future in concurrent.futures.as_completed(future_to_item):
+            item, data = future.result()
+            if data and data.get('data'):
+                pool_data[item] = data
+                
+    return pool_data
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_commodity_prices(commodity_type: str) -> dict[str, Any]:
     """
     Get current commodity price snapshot.

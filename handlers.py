@@ -18,6 +18,9 @@ from inventory_queries import (
     fetch_recursive_bom_for_item,
 )
 from openai_clients import call_openai_sql_generator
+from market_insights import fetch_product_price_history, calculate_hedge_metrics, find_optimal_hedging_asset
+from external_data import fetch_agricultural_market_data, fetch_market_data_pool
+from constants import FUTURES_UNIVERSE
 from parsing_utils import (
     decimal_or_zero,
     extract_item_from_prompt,
@@ -2155,6 +2158,109 @@ def handle_mrp_style_question(cursor: pyodbc.Cursor, prompt: str, today: datetim
     return {"data": results, "insights": insights, "sql": sql_bits, "entities": {"month": month, "year": year, "intent": "planning"}}
 
 
+def handle_hedging_analysis(cursor: pyodbc.Cursor, prompt: str) -> dict | None:
+    """
+    Handle requests for hedging analysis, efficient frontier, and optimal hedge allocation.
+    """
+    lower = prompt.lower()
+    keywords = ("hedge", "hedging", "efficient frontier", "sharpe", "optimal mix", "futures mix")
+    if not any(k in lower for k in keywords):
+        return None
+
+    item_number = extract_item_from_prompt(prompt)
+    if not item_number:
+        return None 
+
+    # 1. Fetch Internal Price History
+    internal_hist = fetch_product_price_history(cursor, item_number, days=365)
+    if not internal_hist:
+        return {"insights": {"summary": f"No purchase history found for {item_number} to analyze hedging."}}
+
+    # 2. Fetch External Futures Data
+    item_desc = internal_hist[0].get('ITEMDESC', item_number)
+    
+    # SMARTER: Fetch pool of potential futures and find best fit
+    pool_data = fetch_market_data_pool(FUTURES_UNIVERSE, timeframe='1y')
+    
+    best_fit = find_optimal_hedging_asset(internal_hist, pool_data)
+    
+    if not best_fit or not best_fit.get('metrics'):
+         return {"insights": {"summary": f"Could not find a suitable hedging instrument for {item_desc} (insufficient correlation)."}}
+
+    metrics = best_fit['metrics']
+    best_asset_name = best_fit['best_asset']
+    
+    # 4. Construct Report
+    opt_hedge_pct = metrics['optimal_hedge_ratio'] * 100
+    phys_pct = 100 - opt_hedge_pct
+    
+    curr_sharpe = metrics['current_sharpe']
+    opt_sharpe = metrics['optimal_sharpe']
+    sharpe_gap = opt_sharpe - curr_sharpe
+    
+    summary = (
+        f"Hedging Analysis for {item_number} ({item_desc}): "
+        f"Top Correlation: **{best_asset_name}** (r={metrics['correlation']:.2f}). "
+        f"Optimal hedge is {opt_hedge_pct:.0f}% futures coverage. "
+        f"Potential Sharpe Ratio improvement: {curr_sharpe:.2f} -> {opt_sharpe:.2f} (+{sharpe_gap:.2f})."
+    )
+    
+    # Efficient Frontier Chart Data
+    frontier_points = metrics.get('frontier_points', [])
+    
+    chart_data = []
+    for p in frontier_points:
+        chart_data.append({
+            "Risk": p['Risk'],
+            "Return": p['Return'],
+            "Label": "Frontier"
+        })
+        
+    chart_data.append({
+        "Risk": metrics['raw_volatility'],
+        "Return": frontier_points[0]['Return'] if frontier_points else 0, 
+        "Label": "Current (Unhedged)"
+    })
+    
+    report_structure = {
+        "title": f"{item_desc} Hedge Efficiency",
+        "sections": [
+            {
+                "type": "metric",
+                "title": "Best Hedge Instrument",
+                "value": f"{best_asset_name}"
+            },
+            {
+                "type": "metric",
+                "title": "Optimal Hedge Ratio",
+                "value": f"{opt_hedge_pct:.0f}% Coverage (r={metrics['correlation']:.2f})"
+            },
+            {
+                "type": "metric",
+                "title": "Sharpe Ratio Gap",
+                "value": f"{curr_sharpe:.2f} vs {opt_sharpe:.2f} (Δ {sharpe_gap:+.2f})"
+            },
+            {
+                "type": "chart",
+                "title": f"Efficient Frontier ({best_asset_name})",
+                "x": "Risk",
+                "y": "Return",
+                "series": "Label",
+            }
+        ]
+    }
+    
+    return {
+        "data": chart_data, 
+        "insights": {
+            "summary": summary,
+            "report_structure": report_structure
+        },
+        "report_structure": report_structure,
+        "entities": {"item": item_number}
+    }
+
+
 def handle_custom_sql_question(
     cursor: pyodbc.Cursor, prompt: str, today: datetime.date, context: dict | None = None, history_hint: str | None = None
 ) -> dict:
@@ -2180,6 +2286,11 @@ def handle_custom_sql_question(
     ppv_result = handle_ppv_analysis(cursor, prompt, today)
     if ppv_result is not None:
         return ppv_result
+
+    # Hedging Analysis
+    hedging_result = handle_hedging_analysis(cursor, prompt)
+    if hedging_result is not None:
+        return hedging_result
 
     # Deterministic raw-material usage: multi-month, single-month, and overall lookbacks.
     multi_month_usage = handle_raw_material_usage_multi_month(cursor, prompt, today)

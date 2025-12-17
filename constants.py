@@ -11,6 +11,7 @@ RAW_MATERIAL_PREFIXES = (
 FINISHED_GOOD_PREFIXES = ('EDTAK', 'EDTAC', 'EDTAN', 'PRO', 'DYN', 'DB', 'BULK', 'SOAR', 'ZZ')
 RAW_MATERIAL_CATEGORIES = {'CHE', 'EDTA', 'ACID', 'RM', 'NPK', 'NO3', 'SO4', 'CL2', 'THIO'}
 FINISHED_GOOD_CATEGORIES = {'DYNAGOLD', 'DIAMONDBACK', 'BULK', 'CUSTOM', 'PRIVATE'}
+# Common raw material class codes to identify raw materials vs finished goods
 RAW_MATERIAL_CLASS_CODES: tuple[str, ...] = (
     'RAWMATTNE',
     'RAWMATNTE',
@@ -20,9 +21,70 @@ RAW_MATERIAL_CLASS_CODES: tuple[str, ...] = (
 RAW_MATERIAL_KEYWORDS = (
     'NITRATE', 'SULFATE', 'ACID', 'HYDROXIDE', 'UREA', 'PHOS', 'CHLORIDE',
     'AMMONIUM', 'BORATE', 'CITRIC', 'GLUCO', 'POTASH', 'PHOSPHORIC',
-    'THIOSULFATE', 'MURIATE', 'POTASSIUM', 'MAGNESIUM', 'CALCIUM',
     'ZINC', 'IRON', 'MANGANESE', 'BORON'
 )
+
+# Universe of liquid futures for hedging correlation analysis
+FUTURES_UNIVERSE = [
+    # --- GLOBAL INDICES ---
+    "S&P 500", "Nasdaq 100", "Dow Jones", "Russell 2000", "VIX", 
+    "Nikkei 225 (Japan)", "DAX (Germany)", "FTSE 100 (UK)", "CAC 40 (France)", "Hang Seng (HK)", "Nifty 50 (India)", "Shanghai Comp", "Bovespa (Brazil)",
+    
+    # --- SECTOR ETFs (Granular Equity Hedges) ---
+    "XLE (Energy)", "XLB (Materials)", "XLI (Industrials)", "XLP (Staples)", "XLY (Discretionary)", 
+    "XLV (Health)", "XLF (Financials)", "XLK (Tech)", "XLU (Utilities)", "XLC (Comm Services)", "IYR (Real Estate)",
+    "MOO (Agribusiness)", "IYT (Transport)", "SMH (Semiconductors)", "XBI (Biotech)", "KRE (Regional Banks)",
+    "ITB (Home Construction)", "XME (Metals & Mining)", "JETS (Airlines)", "TAN (Solar)", "URA (Uranium)",
+    
+    # --- ENERGY ---
+    "Crude Oil", "Brent Crude", "Natural Gas", "Heating Oil", "RBOB Gasoline", "Ethanol", "Uranium", "Coal (Newcastle)",
+    
+    # --- METALS ---
+    "Gold", "Silver", "Platinum", "Palladium", 
+    "Copper", "Aluminum", "Zinc", "Nickel", "Lead", "Tin", 
+    "Lithium Carbonate", "Cobalt", "Steel Rebar", "Iron Ore",
+    
+    # --- AGRICULTURE (GRAINS/OILSEEDS) ---
+    "Corn", "Wheat", "Soybeans", "Soybean Oil", "Soybean Meal", "Oats", "Rice", "Canola", "Palm Oil",
+    
+    # --- SOFTS & TROPICALS ---
+    "Cocoa", "Coffee (Arabica)", "Coffee (Robusta)", "Sugar #11", "Sugar #16", "Orange Juice", "Cotton", "Lumber", "Rubber", "Wool",
+    
+    # --- LIVESTOCK ---
+    "Live Cattle", "Feeder Cattle", "Lean Hogs", "Class III Milk", "Cheese", "Butter",
+    
+    # --- FERTILIZERS ---
+    "Urea", "DAP", "UAN", "Potash", "Sulfur", "Ammonia",
+    
+    # --- CHEMICALS (Proxy) ---
+    "Ethylene", "Propylene", "Benzene", "Methanol", "PVC", "Soda Ash", "Titanium Dioxide",
+    
+    # --- CURRENCIES (FX PAIRED WITH USD) ---
+    "EUR/USD", "JPY/USD", "GBP/USD", "CAD/USD", "AUD/USD", "NZD/USD", 
+    "CHF/USD", "CNY/USD", "MXN/USD", "BRL/USD", "INR/USD", "ZAR/USD",
+    "Dollar Index (DXY)",
+    
+    # --- RATES & BONDS ---
+    "10-Year Treasury Note", "2-Year Treasury Note", "30-Year Bond", "Eurodollar", "Fed Funds Rate", "Gilts (UK)", "Bunds (Germany)",
+    
+    # --- MACRO EVENTS (KALSHI / PREDICTION MKTS) ---
+    "Kalshi: Fed Fund Rate > 5.5%",
+    "Kalshi: Annual CPI > 3%",
+    "Kalshi: Brent Oil > $90",
+    "Kalshi: S&P 500 Daily Dip > 2%",
+    "Kalshi: Global Supply Chain Stress Index > High",
+    "Kalshi: US Recession Probability > 20%",
+    "Kalshi: Weekly Jobless Claims > 250k",
+    "Kalshi: GDP Growth > 2%",
+    "Kalshi: Euribor > 4%",
+    "Kalshi: China GDP > 5%",
+    "Kalshi: Gold > $2500",
+    "Kalshi: Bitcoin > $100k",
+    "Kalshi: 30-Yr Mortgage > 8%",
+    "Kalshi: Hurricane Category > 3 (Atlantic)",
+    "Kalshi: Global Temp Anomaly > 1.5C",
+    "Kalshi: Soy Yield < Trend"
+]
 
 PRIMARY_LOCATION = "MAIN"
 

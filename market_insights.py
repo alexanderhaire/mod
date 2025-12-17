@@ -87,6 +87,9 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 AND h.RECEIPTDATE >= ?
                 AND h.RECEIPTDATE <= ?
                 AND l.UNITCOST > 0
+                AND h.POPTYPE <> 2
+                AND h.VOIDSTTS = 0
+                AND l.NONINVEN = 0
             ORDER BY h.RECEIPTDATE
             """
             cursor.execute(receipt_query, item_number, start_date, end_date)
@@ -430,7 +433,7 @@ def get_product_details(cursor: pyodbc.Cursor, item_number: str) -> dict[str, An
     Get comprehensive product details combining price, usage, and inventory data.
     """
     # Fetch a longer window so price charts and summaries cover multi-year trends
-    price_history = fetch_product_price_history(cursor, item_number, days=1825)  # 5 years
+    price_history = fetch_product_price_history(cursor, item_number, days=3650)  # 10 years
     # Increase usage history to 2 years (730 days) to allow Year-Over-Year seasonality analysis
     usage_history = fetch_product_usage_history(cursor, item_number, days=730)
     inventory_status = fetch_product_inventory_trends(cursor, item_number)
@@ -633,6 +636,9 @@ def fetch_monthly_price_trends(cursor: pyodbc.Cursor, item_number: str, months: 
                 AND h.RECEIPTDATE >= ?
                 AND h.RECEIPTDATE <= ?
                 AND l.UNITCOST > 0
+                AND h.POPTYPE <> 2
+                AND h.VOIDSTTS = 0
+                AND l.NONINVEN = 0
             GROUP BY YEAR(h.RECEIPTDATE), MONTH(h.RECEIPTDATE)
             ORDER BY Year, Month
             """
@@ -733,9 +739,13 @@ def calculate_inventory_runway(cursor: pyodbc.Cursor, item_number: str, fallback
             daily_usage = 0
         
         # Calculate runway
-        available_stock = on_hand + on_order
+        # STRICT RULE: Only count On-Hand for runway to avoid false security
+        available_stock = on_hand 
+        # previously: available_stock = on_hand + on_order
         if daily_usage > 0:
-            runway_days = available_stock / daily_usage
+            # SAFETY BUFFER: Subtract 7 days to ensure emergency stock
+            raw_runway = available_stock / daily_usage
+            runway_days = max(0, raw_runway - 7)
         else:
             runway_days = 999  # Essentially infinite if no usage
         
@@ -776,10 +786,11 @@ def calculate_seasonal_burn_metrics(
 
     - Uses exponential decay (15% drop per month) to weight recent usage higher.
     - Applies a seasonal factor based on the current month's historical usage.
-    - Days of coverage uses both On Hand and On Order stock.
+    - Days of coverage uses ONLY On Hand stock (strict View).
     """
     today = today or datetime.date.today()
-    available_stock = float(on_hand or 0) + float(on_order or 0)
+    # STRICT RULE: Only count On-Hand for runway
+    available_stock = float(on_hand or 0)
 
     if not usage_history:
         return {
@@ -838,7 +849,13 @@ def calculate_seasonal_burn_metrics(
 
     seasonal_factor = max(0.25, min(seasonal_factor, 3.0))
     seasonal_burn_rate = decayed_daily_usage * seasonal_factor
-    days_of_coverage = (available_stock / seasonal_burn_rate) if seasonal_burn_rate > 0 else None
+    
+    # SAFETY BUFFER: Subtract 7 days
+    if seasonal_burn_rate > 0:
+        raw_days = available_stock / seasonal_burn_rate
+        days_of_coverage = max(0, raw_days - 7)
+    else:
+        days_of_coverage = None
 
     return {
         'avg_daily_usage': avg_daily_usage,
@@ -997,6 +1014,9 @@ def recommend_optimal_buy_window(
         stockout_day = int(coverage_days)
     if stockout_day is None:
         stockout_day = horizon
+        
+    # SAFETY BUFFER: Shift stockout date 7 days earlier
+    stockout_day = max(0, stockout_day - 7)
 
     safety_buffer = 3 if stockout_day < 45 else 7
     latest_day = max(0, min(stockout_day, horizon) - safety_buffer)
@@ -1172,6 +1192,48 @@ def get_batch_volatility_scores(cursor: pyodbc.Cursor, limit: int = 50) -> list[
         LOGGER.warning(f"Batch volatility calculation failed: {e}")
         return []
 
+def find_optimal_hedging_asset(
+    internal_history: list[dict[str, Any]],
+    pool_data: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    Iterate through a pool of market data to find the asset with the highest correlation.
+    Returns the best fit asset name and its full metrics.
+    """
+    best_asset = None
+    best_corr = -1.0
+    best_metrics = {}
+
+    for asset_name, asset_data in pool_data.items():
+        futures_history = asset_data.get('data', [])
+        if not futures_history:
+            continue
+            
+        metrics = calculate_hedge_metrics(internal_history, futures_history)
+        if not metrics:
+            continue
+            
+        # Use absolute correlation because a strong negative correlation is also a valid hedge (just reverse position)
+        # But typically we want positive correlation for direct hedging, or negative for inverse.
+        # calculate_hedge_metrics returns distinct optimal_hedge_ratio which handles sign.
+        # So we just look for strength of relationship.
+        corr = abs(metrics.get('correlation', 0))
+        
+        if corr > best_corr:
+            best_corr = corr
+            best_asset = asset_name
+            best_metrics = metrics
+            
+    if best_asset:
+        return {
+            'best_asset': best_asset,
+            'correlation': best_metrics.get('correlation', 0),
+            'metrics': best_metrics,
+            'data': pool_data[best_asset] # Return the full external data for the winner
+        }
+        
+    return {}
+
 
 def get_volatility_score(cursor: pyodbc.Cursor, item_number: str) -> dict[str, Any]:
     """
@@ -1321,6 +1383,9 @@ def get_priority_raw_materials(
             WHERE h.RECEIPTDATE >= DATEADD(month, {months_back}, GETDATE())
               AND h.VENDORID IS NOT NULL 
               AND RTRIM(h.VENDORID) <> ''
+              AND h.POPTYPE <> 2
+              AND h.VOIDSTTS = 0
+              AND l.NONINVEN = 0
             GROUP BY l.ITEMNMBR
         )
         SELECT TOP {limit if limit else 5000}
@@ -1502,6 +1567,9 @@ def get_top_movers_raw_materials(cursor: pyodbc.Cursor, limit: int = 15) -> pd.D
             FROM POP30310 l
             JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
             WHERE l.UNITCOST > 0
+                AND h.POPTYPE <> 2
+                AND h.VOIDSTTS = 0
+                AND l.NONINVEN = 0
                 AND h.RECEIPTDATE >= DATEADD(month, -15, GETDATE()) -- Look back 15 months to cover both periods
         ),
         CurrentPeriod AS (
@@ -1668,3 +1736,359 @@ def get_raw_material_time_series(cursor: pyodbc.Cursor, months: int = 24) -> dic
     except Exception as e:
         LOGGER.warning(f"Raw material time series query failed: {e}")
         return {'monthly_volume': pd.DataFrame(), 'monthly_cost': pd.DataFrame(), 'cost_index': pd.DataFrame()}
+
+def calculate_hedge_metrics(
+    raw_history: list[dict[str, Any]],
+    futures_history: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    Calculate hedging efficiency metrics:
+    - Correlation
+    - Optimal Hedge Ratio (Min Variance and Max Sharpe)
+    - Current vs Optimal Sharpe Ratio
+    - Efficient Frontier points
+    """
+    try:
+        if not raw_history or not futures_history:
+            return {}
+
+        # Convert to DataFrames
+        df_raw = pd.DataFrame(raw_history)
+        df_fut = pd.DataFrame(futures_history)
+
+        # Ensure dates are datetime
+        if 'TransactionDate' in df_raw.columns:
+            df_raw['Date'] = pd.to_datetime(df_raw['TransactionDate'])
+            df_raw = df_raw.set_index('Date').sort_index()
+            # Resample to monthly to align
+            raw_series = df_raw['AvgCost'].resample('ME').mean().ffill()
+        elif 'Date' in df_raw.columns: # If passed from external data format
+             df_raw['Date'] = pd.to_datetime(df_raw['Date'])
+             df_raw = df_raw.set_index('Date').sort_index()
+             raw_series = df_raw['Price'].resample('ME').mean().ffill()
+        else:
+            return {}
+
+        if 'date' in df_fut.columns:
+            df_fut['Date'] = pd.to_datetime(df_fut['date'])
+            df_fut = df_fut.set_index('Date').sort_index()
+            # Resample to monthly
+            fut_series = df_fut['price_index'].resample('ME').mean().ffill()
+        else:
+            return {}
+
+        # Align series
+        aligned = pd.concat([raw_series, fut_series], axis=1, join='inner').dropna()
+        if len(aligned) < 6: # Need some history
+            return {}
+        
+        aligned.columns = ['Raw', 'Fut']
+        
+        # Calculate Returns
+        returns = aligned.pct_change().dropna()
+        
+        if len(returns) < 3:
+            return {}
+
+        # Stats
+        mu_raw = returns['Raw'].mean() * 12 # Annualized
+        sigma_raw = returns['Raw'].std() * np.sqrt(12)
+        
+        mu_fut = returns['Fut'].mean() * 12
+        sigma_fut = returns['Fut'].std() * np.sqrt(12)
+        
+        # Avoid correlation calculation if variance is zero (constant price)
+        if sigma_raw == 0 or sigma_fut == 0:
+            corr = 0.0
+        else:
+            try:
+                corr = returns['Raw'].corr(returns['Fut'])
+                if np.isnan(corr): corr = 0.0
+            except:
+                corr = 0.0
+        
+        # Optimal Hedge Ratio (Minimum Variance)
+        # h* = rho * (sigma_spot / sigma_fut)
+        # But we are hedging a long position in Raw with a Short position in Fut.
+        # Portfolio P = Raw - h * Fut
+        # Var(P) = sigma_r^2 + h^2*sigma_f^2 - 2*h*rho*sigma_r*sigma_f
+        # dVar/dh = 2h*sigma_f^2 - 2*rho*sigma_r*sigma_f = 0 => h = rho * (sigma_r / sigma_fut)
+        
+        if sigma_fut > 0:
+            min_var_hedge_ratio = corr * (sigma_raw / sigma_fut)
+        else:
+            min_var_hedge_ratio = 0
+            
+        # Max Sharpe Ratio Optimization
+        # We want to find weight w (fraction unhedged? or hedge ratio?)
+        # Let's stick to the user's definition: "mix of raw material vs futures"
+        # "Raw = w, Futures = (1-w) effectively as a short position"
+        # This implies a portfolio construction: P = w * Raw_Return + (1-w) * Fut_Return
+        # Wait, usually hedging means holding the physical (100%) and shorting futures (h%).
+        # The user said: "Cocoa: 60% Physical, 40% Futures" as the recommended mix.
+        # This sounds like a portfolio weight problem where we allocate capital. 
+        # But for procurement, we hold 100% physical. The "mix" might be "Hedge Ratio".
+        # User example: "60% Physical, 40% Futures" -> "40% offset via futures".
+        # This implies Hedge Ratio = 0.4.
+        # Let's assume we are optimizing the Hedge Ratio h.
+        # Portfolio Return = R_raw - h * R_fut (assuming short futures)
+        # Actually, if futures return is positive, shorting it loses money.
+        # So Return = mu_raw - h * mu_fut.
+        # Volatility = sqrt(sigma_raw^2 + h^2*sigma_fut^2 - 2*h*corr*sigma_raw*sigma_fut)
+        # We maximize (Return) / Volatility.
+        
+        best_h = 0.0
+        best_sharpe = -999.0
+        
+        # Simple grid search for h from -1.5 to 1.5 (Allow Long Hedges for negative correlation)
+        hedge_ratios = np.linspace(-1.5, 1.5, 200)
+        frontier_points = []
+        
+        # Zero-Drift Assumption:
+        # For ex-ante hedging, we assume futures are fair-priced (expected return = 0).
+        # We optimize purely for risk-adjusted stability of the *physical* position.
+        # This prevents "Bull Market Bias" where the model refuses to hedge because futures went up last year.
+        mu_fut_opt = 0.0 
+        
+        for h in hedge_ratios:
+            # Return of hedged portfolio
+            # If we short futures, we pay the return.
+            # But futures P&L is (Sell Price - Buy Price). 
+            # If prices go up, we lose on short.
+            # So yes, Return = R_raw - h * R_fut.
+            
+            p_ret = mu_raw - h * mu_fut_opt # Use zero drift for optimization decision
+            
+            var_p = (sigma_raw**2) + (h**2 * sigma_fut**2) - (2 * h * corr * sigma_raw * sigma_fut)
+            p_vol = np.sqrt(var_p) if var_p > 0 else 0.001
+            
+            sharpe = p_ret / p_vol
+            
+            frontier_points.append({
+                "HedgeRatio": float(h),
+                "Return": float(p_ret),
+                "Risk": float(p_vol),
+                "Sharpe": float(sharpe)
+            })
+            
+            # Store the volatility for the best h to calc reduction later
+            if sharpe > best_sharpe:
+                best_sharpe = sharpe
+                best_h = h
+                best_metrics_vol = p_vol
+                
+        
+        # Determine Optimization Strategy
+        # If the asset has negative expected returns (mu_raw < 0), maximizing Sharpe (Return/Risk)
+        # leads to maximizing Risk (to allow the ratio to be 'less negative' or just weird behavior).
+        # In these cases, we FORCE Minimum Variance Optimization.
+        force_min_var = (mu_raw < 0) or (best_h < 0.05 and abs(corr) > 0.3 and min_var_hedge_ratio > 0.05)
+        
+        if force_min_var:
+             # Force consideration of MinVar hedge
+            h_alt = min(1.5, abs(min_var_hedge_ratio))
+            if h_alt < 0.01: h_alt = 0.0 # Avoid dust
+            
+            p_ret_alt = mu_raw - h_alt * mu_fut_opt
+            var_p_alt = (sigma_raw**2) + (h_alt**2 * sigma_fut**2) - (2 * h_alt * corr * sigma_raw * sigma_fut)
+            p_vol_alt = np.sqrt(var_p_alt) if var_p_alt > 0 else 0.001
+            
+            # If original return was negative, risk reduction makes Sharpe "worse" (more negative).
+            # This is mathematically correct but confusing to users ("Why did you make my Sharpe -11?").
+            # We keep the raw calculation but rely on 'Volatility Reduction' to sell the hedge utility.
+            sharpe_alt = p_ret_alt / p_vol_alt
+            
+            best_h = h_alt
+            best_sharpe = sharpe_alt
+            best_metrics_vol = p_vol_alt
+
+                
+        # Current Portfolio (Unhedged, h=0)
+        current_ret = mu_raw
+        current_vol = sigma_raw
+        current_sharpe = current_ret / current_vol if current_vol > 0 else 0
+        
+        current_sharpe = current_ret / current_vol if current_vol > 0 else 0
+        
+        # Recalculate Best Metrics using ACTUAL historical drift for display accuracy?
+        # Or stick to the Zero Drift "Proforma" view?
+        # User wants to know if "Sharpe increases". Using Zero Drift is the specific "Hedged Portfolio Structure" view.
+        # Let's return the metrics consistent with the optimization assumption.
+        
+        vol_reduction = ((current_vol - best_metrics_vol) / current_vol) * 100 if current_vol > 0 else 0
+        
+        return {
+            "correlation": corr,
+            "raw_volatility": sigma_raw,
+            "futures_volatility": sigma_fut,
+            "optimal_hedge_ratio": best_h,
+            "optimal_sharpe": best_sharpe,
+            "min_var_hedge_ratio": min_var_hedge_ratio,
+            "volatility_reduction": vol_reduction
+        }
+
+    except Exception as e:
+        LOGGER.error(f"Error calculating hedge metrics: {e}")
+        return {}
+
+
+def simulate_portfolio_variance(
+    current_value: float,
+    unhedged_vol: float,
+    hedged_vol: float,
+    mu: float = 0.05, # Assumed 5% drift for simulation context
+    months: int = 6,
+    num_simulations: int = 1000
+) -> pd.DataFrame:
+    """
+    Run Monte Carlo simulation for portfolio value under Unhedged vs Hedged volatility.
+    Uses Geometric Brownian Motion: dS = mu*S*dt + sigma*S*dW
+    """
+    dt = 1/252 # Daily steps
+    days = months * 21
+    
+    # 1. Unhedged Simulation
+    # Vectorized simulation
+    # Returns: Matrix of [sims, days]
+    drift = (mu - 0.5 * unhedged_vol**2) * dt
+    shock_unhedged = unhedged_vol * np.sqrt(dt) * np.random.normal(0, 1, (num_simulations, days))
+    
+    # Starting value
+    # Calculate returns (t=1 to t=days)
+    returns_unhedged = np.exp(np.cumsum(drift + shock_unhedged, axis=1))
+    
+    # Prepend starting state (t=0, return=1.0)
+    initial_state = np.ones((num_simulations, 1))
+    path_multipliers_u = np.hstack([initial_state, returns_unhedged])
+    
+    # Paths shape: [sims, days+1]
+    paths_unhedged = current_value * path_multipliers_u
+    
+    # 2. Hedged Simulation
+    drift_h = (mu - 0.5 * hedged_vol**2) * dt
+    shock_hedged = hedged_vol * np.sqrt(dt) * np.random.normal(0, 1, (num_simulations, days))
+    
+    returns_hedged = np.exp(np.cumsum(drift_h + shock_hedged, axis=1))
+    path_multipliers_h = np.hstack([initial_state, returns_hedged])
+    
+    paths_hedged = current_value * path_multipliers_h
+    
+    # Collect final values for distribution plot
+    final_values_unhedged = paths_unhedged[:, -1]
+    final_values_hedged = paths_hedged[:, -1]
+    
+    # Create DataFrame for Altair (Distribution)
+    df_unhedged = pd.DataFrame({'Value': final_values_unhedged, 'Scenario': 'Unhedged'})
+    df_hedged = pd.DataFrame({'Value': final_values_hedged, 'Scenario': 'Hedged'})
+    
+    dist_df = pd.concat([df_unhedged, df_hedged], ignore_index=True)
+    
+    # Create DataFrame for Time Series (Aggregated)
+    # Calculate stats per day
+    days_range = np.arange(days + 1)
+    
+    unhedged_mean = np.mean(paths_unhedged, axis=0)
+    unhedged_p05 = np.percentile(paths_unhedged, 5, axis=0)
+    unhedged_p95 = np.percentile(paths_unhedged, 95, axis=0)
+    
+    hedged_mean = np.mean(paths_hedged, axis=0)
+    hedged_p05 = np.percentile(paths_hedged, 5, axis=0)
+    hedged_p95 = np.percentile(paths_hedged, 95, axis=0)
+    
+    # Flatten for Altair
+    # Format: [Day, Scenario, Mean, Lower, Upper]
+    ts_data = []
+    
+    # Downsample for charting if needed (every 7 days to reduce size), but 180 points is fine.
+    for i in range(0, days + 1, 1):
+        ts_data.append({'Day': i, 'Scenario': 'Unhedged', 'Mean': unhedged_mean[i], 'Lower': unhedged_p05[i], 'Upper': unhedged_p95[i]})
+        ts_data.append({'Day': i, 'Scenario': 'Hedged', 'Mean': hedged_mean[i], 'Lower': hedged_p05[i], 'Upper': hedged_p95[i]})
+        
+    ts_df = pd.DataFrame(ts_data)
+    
+    return {
+        'distribution': dist_df,
+        'timeseries': ts_df
+    }
+
+def optimize_capital_allocation(candidates: list[dict[str, Any]], total_capital: float = 10000.0) -> pd.DataFrame:
+    """
+    Allocates a fixed capital budget across the best hedging opportunities to maximize Portfolio Sharpe.
+    Implements a 'Smart Concentration' strategy:
+    1. Filter for positive Sharpe Gain.
+    2. Rank by Sharpe Efficiency (Sharpe Gain / Vol Reduction).
+    3. Allocate capital proportionally to conviction.
+    """
+    if not candidates:
+        return pd.DataFrame()
+        
+    df = pd.DataFrame(candidates)
+    
+    # Check required columns
+    required_cols = ['Item', 'Best Hedge', 'Sharpe Gain', 'Vol Reduction']
+    for col in required_cols:
+         if col not in df.columns:
+             return pd.DataFrame() # Missing data
+
+    # 1. Filter for viable trades
+    # Ensure numeric
+    df['Sharpe Gain'] = pd.to_numeric(df['Sharpe Gain'], errors='coerce').fillna(0)
+    df['Vol Reduction'] = pd.to_numeric(df['Vol Reduction'], errors='coerce').fillna(0)
+    
+    df = df[df['Sharpe Gain'] > 0].copy()
+    if df.empty:
+        return pd.DataFrame()
+        
+    # 2. Score Opportunities
+    # Score = Sharpe Gain * (Vol Reduction / 100)
+    # This rewards high impact hedges.
+    df['Score'] = df['Sharpe Gain'] * (df['Vol Reduction'] / 100.0)
+    
+    # 3. Select Top Picks (Constraint: Max 5 positions for $10k to ensure meaningful size)
+    # Concentration is key for high Sharpe.
+    df = df.sort_values('Score', ascending=False).head(5)
+    
+    # 4. Allocate Capital
+    # Proportional to Score
+    total_score = df['Score'].sum()
+    if total_score > 0:
+        df['Allocation %'] = df['Score'] / total_score
+    else:
+        df['Allocation %'] = 1.0 / len(df)
+        
+    df['Allocated Capital'] = df['Allocation %'] * total_capital
+    
+    return df[['Item', 'Best Hedge', 'Sharpe Gain', 'Allocated Capital', 'Allocation %']]
+
+
+def calculate_black_scholes_put(
+    S: float, 
+    K: float, 
+    T: float, 
+    r: float, 
+    sigma: float
+) -> float:
+    """
+    Calculate Black-Scholes Price for a Put Option.
+    Used to value the 'Implied Insurance' of the portfolio.
+    
+    S: Current Price (Portfolio Value)
+    K: Strike Price (Target Value, usually S for ATM)
+    T: Time to expiration (years)
+    r: Risk-free rate (decimal)
+    sigma: Volatility (decimal)
+    """
+    import math
+    
+    def norm_cdf(x):
+        """Cumulative distribution function for the standard normal distribution."""
+        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+    
+    if sigma <= 0 or T <= 0:
+        return 0.0
+        
+    d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    
+    put_price = K * np.exp(-r * T) * norm_cdf(-d2) - S * norm_cdf(-d1)
+    return float(put_price)
