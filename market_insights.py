@@ -74,13 +74,16 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
             # Fetch raw transactions to allow vendor filtering and unit normalization
             receipt_query = """
             SELECT 
-                CAST(h.RECEIPTDATE AS DATE) as TransactionDate,
-                h.VENDORID,
-                h.VENDNAME,
-                l.UOFM,
-                l.UMQTYINB,
-                l.UNITCOST,
-                l.EXTDCOST
+                CAST(MAX(h.RECEIPTDATE) AS DATE) as TransactionDate,
+                MAX(h.VENDORID) as VENDORID,
+                MAX(h.VENDNAME) as VENDNAME,
+                MAX(l.UOFM) as UOFM,
+                MAX(l.UMQTYINB) as UMQTYINB,
+                AVG(l.UNITCOST) as UNITCOST,
+                SUM(l.EXTDCOST) as EXTDCOST,
+                MAX(h.ORFRTAMT) as ORFRTAMT,
+                MAX(h.SUBTOTAL) as SUBTOTAL,
+                (SELECT TOP 1 UNITCOST FROM IV10200 iv WHERE iv.RCPTNMBR = l.POPRCTNM AND iv.ITEMNMBR = l.ITEMNMBR) as InventoryUnitCost
             FROM POP30310 l
             JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
             WHERE l.ITEMNMBR = ?
@@ -90,7 +93,9 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 AND h.POPTYPE <> 2
                 AND h.VOIDSTTS = 0
                 AND l.NONINVEN = 0
-            ORDER BY h.RECEIPTDATE
+                AND l.LOCNCODE = 'MAIN'
+            GROUP BY l.POPRCTNM, l.ITEMNMBR
+            ORDER BY TransactionDate
             """
             cursor.execute(receipt_query, item_number, start_date, end_date)
             history_rows = cursor.fetchall()
@@ -101,29 +106,38 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 for row in history_rows:
                     r = dict(zip(hist_columns, row))
                     qty_in_base = float(r.get('UMQTYINB') or 1)
-                    unit_cost = float(r.get('UNITCOST') or 0)
+                    
+                    # USER DEFINITIONS:
+                    # "Landed Cost" = Vendor Base Price (e.g. 0.5875)
+                    # "Delivered Cost" = Fully Loaded / Inventory Price (e.g. 0.6015)
+                    
+                    landed_cost_val = float(r.get('UNITCOST') or 0)
+                    delivered_cost_val = float(r.get('InventoryUnitCost') or 0)
+                    
                     ext_cost = float(r.get('EXTDCOST') or 0)
                     
                     # Normalize cost to Base Unit (e.g., Cost Per Pound)
                     if qty_in_base > 0:
-                        norm_cost = unit_cost / qty_in_base
+                        norm_landed = landed_cost_val / qty_in_base
+                        norm_delivered = delivered_cost_val / qty_in_base
                     else:
-                        norm_cost = unit_cost
+                        norm_landed = landed_cost_val
+                        norm_delivered = delivered_cost_val
                         
                     # Calculate Quantity based on Cost
-                    # Quantity (Purchase UofM) = EXTDCOST / UNITCOST
-                    # Quantity (Base UofM) = Quantity (Purchase) * UMQTYINB
                     qty_purchased = 0
-                    if unit_cost > 0:
-                         qty_purchased = (ext_cost / unit_cost) * qty_in_base
+                    if landed_cost_val > 0:
+                         qty_purchased = (ext_cost / landed_cost_val) * qty_in_base
                     
                     history.append({
                         'TransactionDate': r['TransactionDate'],
-                        'AvgCost': norm_cost, # Normalized cost
+                        'AvgCost': norm_delivered, # Use Delivered (High) as main line
+                        'DeliveredCost': norm_delivered, 
+                        'LandedCost': norm_landed,
                         'VendorID': str(r.get('VENDORID', '')).strip(),
                         'VendorName': str(r.get('VENDNAME', '')).strip(),
                         'UofM': str(r.get('UOFM', '')).strip(),
-                        'OriginalCost': unit_cost,
+                        'OriginalCost': landed_cost_val,
                         'ExtendedCost': ext_cost,
                         'TransactionCount': 1,
                         'Quantity': qty_purchased
@@ -160,7 +174,10 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 history = []
                 for row in history_rows:
                     r = dict(zip(hist_columns, row))
-                    r['AvgCost'] = float(r.get('AvgCost') or 0)
+                    avg_cost = float(r.get('AvgCost') or 0)
+                    r['AvgCost'] = avg_cost
+                    r['DeliveredCost'] = avg_cost # Match AvgCost
+                    r['LandedCost'] = avg_cost # Match AvgCost
                     r['Quantity'] = float(r.get('Quantity') or 0)
                     history.append(r)
         

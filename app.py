@@ -2294,11 +2294,13 @@ try:
                                 # Aggregate logic (Same as before)
                                 chart_data = data_df.groupby('TransactionDate').agg({
                                     'AvgCost': 'mean',
+                                    'LandedCost': 'mean',
                                     'TransactionCount': 'sum',
                                     'Quantity': 'sum'
                                 }).reset_index()
 
                                 chart_data['AvgCost'] = chart_data['AvgCost'].astype(float)
+                                chart_data['LandedCost'] = chart_data['LandedCost'].astype(float)
                                 chart_data['TransactionCount'] = chart_data['TransactionCount'].astype(float)
                                 chart_data['Quantity'] = chart_data['Quantity'].astype(float)
 
@@ -2306,16 +2308,29 @@ try:
                                 base = alt.Chart(chart_data).encode(
                                     x=alt.X('TransactionDate:T', title='Date', axis=alt.Axis(labelAngle=-45, format='%b %Y'))
                                 )
-                                cost_line = base.mark_line(color='#ffb000', strokeWidth=3).encode(
+                                # Cost Layer (Line + Points)
+                                cost_base = base.encode(
                                     y=alt.Y('AvgCost:Q', title='Average Cost ($)', scale=alt.Scale(zero=False)),
-                                    tooltip=['TransactionDate', 'AvgCost', 'TransactionCount']
+                                    tooltip=[
+                                        alt.Tooltip('TransactionDate', title='Date', format='%Y-%m-%d'),
+                                        alt.Tooltip('AvgCost', title='Delivered Cost', format='$,.4f'),
+                                        alt.Tooltip('LandedCost', title='Landed Cost', format='$,.4f'),
+                                        alt.Tooltip('Quantity', title='Quantity', format=',.0f')
+                                    ]
                                 )
-                                
+                                line = cost_base.mark_line(color='#ffb000', strokeWidth=3)
+                                points = cost_base.mark_point(color='#ffb000', size=80, filled=True)
+                                cost_line = line + points
                                 final_chart = cost_line
                                 if 'Quantity' in chart_data.columns:
                                     bars = base.mark_bar(opacity=0.3, color='#859900').encode(
                                         y=alt.Y('Quantity:Q', title='Quantity', axis=alt.Axis(titleColor='#859900')),
-                                        tooltip=['TransactionDate', 'Quantity']
+                                        tooltip=[
+                                            alt.Tooltip('TransactionDate', title='Date', format='%Y-%m-%d'),
+                                            alt.Tooltip('AvgCost', title='Delivered Cost', format='$,.4f'),
+                                            alt.Tooltip('LandedCost', title='Landed Cost', format='$,.4f'),
+                                            alt.Tooltip('Quantity', title='Quantity', format=',.0f')
+                                        ]
                                     )
                                     final_chart = alt.layer(bars, cost_line).resolve_scale(y='independent')
                                 
