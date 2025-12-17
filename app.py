@@ -2162,77 +2162,84 @@ try:
                                 min_txn_date = five_years_ago
                                 capped_max_date = today + dt.timedelta(days=1)
                                 
-                            range_master_key = f"date_range_{product_item}"
-                            range_price_key = f"{range_master_key}_price"
-                            range_usage_key = f"{range_master_key}_usage"
-                            range_usage_state_key = f"{range_master_key}_usage_state"
-                            range_usage_override_key = f"{range_master_key}_usage_override"
-                            range_usage_auto_key = f"{range_master_key}_usage_auto"
-                            default_range = (min_txn_date, capped_max_date)
+                            # --- ROBUST DATE SELECTION ---
+                            # Global Bounds
+                            min_dt = min_txn_date
+                            max_dt = capped_max_date
+                            
+                            range_key = f"date_range_v2_{product_item}"
+                            range_usage_key = f"{range_key}_usage"
+                            range_usage_state_key = f"{range_key}_usage_state"
+                            range_usage_override_key = f"{range_key}_usage_override"
+                            
+                            # Default Range: Full history if not too long, else last year
+                            default_start = min_dt
+                            default_end = max_dt
+                            
+                            if range_key not in st.session_state:
+                                st.session_state[range_key] = (default_start, default_end)
+                            
+                            # Validation Step: Ensure retained state is valid for CURRENT product bounds
+                            # This fixes the "crash on product switch" bug
+                            current_val = st.session_state[range_key]
+                            
+                            # Ensure it's a tuple of 2
+                            if not isinstance(current_val, (tuple, list)) or len(current_val) != 2:
+                                current_val = (default_start, default_end)
+                                
+                            start_val, end_val = current_val
+                            
+                            # Safe Clamp Function
+                            def safe_clamp(val, min_v, max_v):
+                                if pd.isna(val): return min_v
+                                if val < min_v: return min_v
+                                if val > max_v: return max_v
+                                return val
 
-                            def _normalize_date_range(val):
-                                if isinstance(val, (list, tuple)) and len(val) == 2:
-                                    start, end = val
-                                    start = start or min_txn_date
-                                    end = end or capped_max_date
-                                    # Clamp within bounds and ensure start <= end
-                                    start = max(min_txn_date, start)
-                                    end = min(capped_max_date, end)
-                                    if start > end:
-                                        start, end = end, start
-                                    return (start, end)
-                                return default_range
-
-                            if range_master_key not in st.session_state:
-                                st.session_state[range_master_key] = default_range
-
-                            # Always clamp any pre-existing state to bounded, day-lagged values
-                            st.session_state[range_master_key] = _normalize_date_range(
-                                st.session_state.get(range_master_key, default_range)
-                            )
-
-                            date_range = st.date_input(
+                            # Re-clamp values to current product's valid range
+                            clean_start = safe_clamp(start_val, min_dt, max_dt)
+                            clean_end = safe_clamp(end_val, min_dt, max_dt)
+                            
+                            if clean_start > clean_end:
+                                clean_start = clean_end # classic swap fix
+                                
+                            # Update session state if we had to fix it (silent fix, no rerun needed usually unless strict)
+                            # We pass the CLEAN values to the widget
+                            
+                            new_range = st.date_input(
                                 "Adjust date range",
-                                value=st.session_state[range_master_key],
-                                min_value=min_txn_date,
-                                max_value=capped_max_date,
-                                key=range_price_key,
+                                value=(clean_start, clean_end),
+                                min_value=min_dt,
+                                max_value=max_dt,
+                                key=f"widget_{range_key}" # Widget key different from storage key to allow manual sync if needed, but here we just read return
                             )
-                            normalized_range = _normalize_date_range(date_range)
-                            if tuple(normalized_range) != tuple(st.session_state[range_master_key]):
-                                st.session_state[range_master_key] = normalized_range
-                                if tuple(date_range) != tuple(normalized_range):
-                                    st.rerun()
-                            start_date, end_date = st.session_state[range_master_key]
-
-                            if range_usage_override_key not in st.session_state:
-                                st.session_state[range_usage_override_key] = {}
-                            if range_usage_auto_key not in st.session_state:
-                                st.session_state[range_usage_auto_key] = {}
-
-                            def _usage_override_enabled(key):
-                                return st.session_state.get(range_usage_override_key, {}).get(key, False)
-
-                            def _set_usage_override(key, value=True):
-                                st.session_state.setdefault(range_usage_override_key, {})
-                                st.session_state[range_usage_override_key][key] = value
-
-                            def _get_last_auto_range(key):
-                                return st.session_state.get(range_usage_auto_key, {}).get(key)
-
-                            def _set_last_auto_range(key, val):
-                                st.session_state.setdefault(range_usage_auto_key, {})
-                                st.session_state[range_usage_auto_key][key] = val
-
-                            st.session_state[range_usage_state_key] = _normalize_date_range(
-                                st.session_state.get(range_usage_state_key, (start_date, end_date))
-                            )
-                            if not _usage_override_enabled(range_usage_state_key):
-                                st.session_state[range_usage_state_key] = (start_date, end_date)
+                            
+                            # Update Storage
+                            if new_range != st.session_state[range_key]:
+                                # Only update if it's a valid complete range (Streamlit returns tuple of 1 during selection)
+                                if isinstance(new_range, (tuple, list)) and len(new_range) == 2:
+                                    st.session_state[range_key] = new_range
+                                    st.rerun() # Rerun to apply the new range to the charts immediately
+                            
+                            # Final values for filtering
+                            if isinstance(new_range, (tuple, list)) and len(new_range) == 2:
+                                start_date, end_date = new_range
                             else:
-                                st.session_state[range_usage_state_key] = _normalize_date_range(
-                                    st.session_state[range_usage_state_key]
-                                )
+                                start_date, end_date = clean_start, clean_end
+
+                            # --- USAGE OVERRIDE HELPERS ---
+                            # These are now simpler and robust, checking keys specifically passed
+                            def _ensure_usage_state(key, default_val):
+                                if key not in st.session_state:
+                                    st.session_state[key] = default_val
+                                    
+                            def _usage_override_enabled(key, override_key=None):
+                                flag_key = override_key or f"{key}_is_overridden"
+                                return st.session_state.get(flag_key, False)
+
+                            def _set_usage_override(key, override_key=None, value=True):
+                                flag_key = override_key or f"{key}_is_overridden"
+                                st.session_state[flag_key] = value
 
                             filtered_hist_df = hist_df[
                                 (hist_df['TransactionDate'].dt.date >= start_date)
@@ -2242,168 +2249,179 @@ try:
                             # Helper to render chart + usage map
                             def render_price_chart(
                                 data_df,
+                                get_safe_clamp_func, # Pass safe_clamp or closure
                                 start_date=None,
                                 end_date=None,
                                 date_bounds=None,
                                 usage_state_key=None,
-                                usage_override_key=None,
                                 usage_input_key=None,
+                                usage_override_key=None,
+                                **kwargs
                             ):
                                 if data_df.empty:
                                     st.info("No data available.")
                                     return
 
+                                # robust clamp from outer scope
+                                safe_clamp = get_safe_clamp_func 
+                                
+                                usage_view_key = f"{usage_input_key}_view_mode" if usage_input_key else "usage_view_mode" 
+
+                                usage_widget_key = f"{usage_input_key}_widget" if usage_input_key else None
+                                override_widget_key = f"{usage_override_key}_widget" if usage_override_key else None
+
                                 usage_start_dt = pd.to_datetime(start_date) if start_date else pd.NaT
                                 usage_end_dt = pd.to_datetime(end_date) if end_date else pd.NaT
-                                start_dt = usage_start_dt
-                                end_dt = usage_end_dt
 
                                 auto_usage_range = None
                                 if "TransactionDate" in data_df.columns:
                                     tx_dates = pd.to_datetime(data_df["TransactionDate"])
                                     if not tx_dates.empty:
-                                        auto_usage_range = (
-                                            tx_dates.min().date(),
-                                            tx_dates.max().date(),
-                                        )
+                                        raw_min = tx_dates.min().date()
+                                        raw_max = tx_dates.max().date()
                                         
-                                        # Clamp to master bounds (unless specific override for PHOS 75)
+                                        # Clamp auto range to global bounds if provided
                                         if date_bounds:
-                                            # Check if this is the special PHOS 75 case by inspecting key or just relaxing logic
-                                            is_phos_override = usage_state_key and "PHOS" in str(usage_state_key).upper() and "75" in str(usage_state_key)
-                                            
-                                            if is_phos_override:
-                                                # Allow bounds to dictate max, don't clamp to data end
-                                                auto_usage_range = (
-                                                    min(date_bounds[0], auto_usage_range[0]),
-                                                    max(date_bounds[1], auto_usage_range[1]),
-                                                )
-                                            else:
-                                                auto_usage_range = (
-                                                    max(date_bounds[0], auto_usage_range[0]),
-                                                    min(date_bounds[1], auto_usage_range[1]),
-                                                )
+                                            # safe_clamp expects (val, min, max)
+                                            c_min = safe_clamp(raw_min, date_bounds[0], date_bounds[1])
+                                            c_max = safe_clamp(raw_max, date_bounds[0], date_bounds[1])
+                                            if c_min > c_max:
+                                                c_min = c_max
+                                            auto_usage_range = (c_min, c_max)
+                                        else:
+                                            auto_usage_range = (raw_min, raw_max)
 
-                                # Aggregate by date to handle multiple transactions per day
-                                # For RM: Aggregates raw receipts. For FG: Re-aggregates daily summaries (no-op mostly)
+                                # Aggregate logic (Same as before)
                                 chart_data = data_df.groupby('TransactionDate').agg({
                                     'AvgCost': 'mean',
                                     'TransactionCount': 'sum',
                                     'Quantity': 'sum'
                                 }).reset_index()
 
-                                # Cast to float to avoid Altair Decimal warnings
                                 chart_data['AvgCost'] = chart_data['AvgCost'].astype(float)
                                 chart_data['TransactionCount'] = chart_data['TransactionCount'].astype(float)
                                 chart_data['Quantity'] = chart_data['Quantity'].astype(float)
 
-                                # Base chart with zoom/pan interaction
+                                # Base chart
                                 base = alt.Chart(chart_data).encode(
-                                    x=alt.X('TransactionDate:T', 
-                                           title='Date',
-                                           axis=alt.Axis(labelAngle=-45, format='%b %Y'))
+                                    x=alt.X('TransactionDate:T', title='Date', axis=alt.Axis(labelAngle=-45, format='%b %Y'))
+                                )
+                                cost_line = base.mark_line(color='#ffb000', strokeWidth=3).encode(
+                                    y=alt.Y('AvgCost:Q', title='Average Cost ($)', scale=alt.Scale(zero=False)),
+                                    tooltip=['TransactionDate', 'AvgCost', 'TransactionCount']
                                 )
                                 
-                                # Cost line (left axis) - Primary metric
-                                cost_line = base.mark_line(
-                                    color='#ffb000',
-                                    strokeWidth=3,
-                                    point=alt.OverlayMarkDef(
-                                        filled=True,
-                                        size=80,
-                                        color='#ffb000'
-                                    )
-                                ).encode(
-                                    y=alt.Y('AvgCost:Q', 
-                                           title='Average Cost ($)',
-                                           scale=alt.Scale(zero=False)),
-                                    tooltip=[
-                                        alt.Tooltip('TransactionDate:T', title='Date', format='%Y-%m-%d'),
-                                        alt.Tooltip('AvgCost:Q', title='Avg Cost', format='$,.2f'),
-                                        alt.Tooltip('TransactionCount:Q', title='Transactions', format=',d')
-                                    ]
-                                )
-                                
-                                # Transaction volume bars (right axis) - Secondary metric
+                                final_chart = cost_line
                                 if 'Quantity' in chart_data.columns:
-                                    volume_bars = base.mark_bar(
-                                        opacity=0.3,
-                                        color='#859900'
-                                    ).encode(
-                                        y=alt.Y('Quantity:Q',
-                                               title='Quantity Purchased',
-                                               axis=alt.Axis(titleColor='#859900')),
-                                        tooltip=[
-                                            alt.Tooltip('TransactionDate:T', title='Date', format='%Y-%m-%d'),
-                                            alt.Tooltip('Quantity:Q', title='Qty Purchased', format=',.2f'),
-                                            alt.Tooltip('TransactionCount:Q', title='Transactions', format=',d')
-                                        ]
+                                    bars = base.mark_bar(opacity=0.3, color='#859900').encode(
+                                        y=alt.Y('Quantity:Q', title='Quantity', axis=alt.Axis(titleColor='#859900')),
+                                        tooltip=['TransactionDate', 'Quantity']
                                     )
-                                    
-                                    # Combine with dual axis + interactivity
-                                    chart = alt.layer(
-                                        volume_bars,
-                                        cost_line
-                                    ).resolve_scale(
-                                        y='independent'  # Independent Y-axes
-                                    ).properties(
-                                        height=300
-                                    ).interactive()
-                                else:
-                                    chart = cost_line.properties(height=300).interactive()
+                                    final_chart = alt.layer(bars, cost_line).resolve_scale(y='independent')
                                 
-                                st.altair_chart(chart, width="stretch")
+                                # Layout: Chart (Left) + Stats (Right)
+                                col_chart, col_stats = st.columns([3, 1])
+                                
+                                with col_chart:
+                                    st.altair_chart(final_chart.properties(height=300).interactive(), width="stretch")
+                                
+                                with col_stats:
+                                    st.markdown("##### 📊 Summary")
+                                    # Calculate totals from the aggregated chart_data to match what's visual
+                                    total_qty = chart_data['Quantity'].sum() if 'Quantity' in chart_data.columns else 0
+                                    
+                                    # Weighted Avg Cost = Sum(AvgCost * Qty) / Total Qty
+                                    # Note: This is an approx based on daily avg. Ideally we'd sum ExtendedCost from raw df.
+                                    # Let's try to get it from data_df if possible for accuracy
+                                    if not data_df.empty and 'ExtendedCost' in data_df.columns:
+                                        total_spend = data_df['ExtendedCost'].sum()
+                                        transaction_count = len(data_df)
+                                    else:
+                                        # Fallback to approx
+                                        total_spend = (chart_data['AvgCost'] * chart_data['Quantity']).sum() if 'Quantity' in chart_data.columns else 0
+                                        transaction_count = chart_data['TransactionCount'].sum()
 
-                                # Usage map below price chart with toggle for all vs monthly rollups
-                                usage_view_key = f"{usage_input_key}_view_mode" if usage_input_key else "usage_view_mode"
+                                    w_avg_cost = (total_spend / total_qty) if total_qty > 0 else 0
+                                    
+                                    st.metric("Total Spend", f"${total_spend:,.2f}")
+                                    st.metric("Total Qty", f"{total_qty:,.0f}")
+                                    st.metric("Avg Price", f"${w_avg_cost:,.4f}")
+                                    st.caption(f"{int(transaction_count)} transactions")
+
+                                # Usage Date Logic (Cleaned Up)
+                                # Usage Date Logic (Cleaned Up)
                                 if usage_state_key and date_bounds:
-                                    st.session_state[usage_state_key] = _normalize_date_range(
-                                        st.session_state.get(
-                                            usage_state_key,
-                                            auto_usage_range or date_bounds
-                                        )
+                                    # Ensure we have a valid default
+                                    default_u = auto_usage_range or date_bounds
+                                    if usage_state_key not in st.session_state:
+                                        st.session_state[usage_state_key] = default_u
+                                    
+                                    # Validate existing state
+                                    curr_u = st.session_state[usage_state_key]
+                                    if not isinstance(curr_u, (tuple, list)) or len(curr_u) != 2:
+                                        curr_u = default_u
+                                    
+                                    # Clamp existing state
+                                    c_start = safe_clamp(curr_u[0], date_bounds[0], date_bounds[1])
+                                    c_end = safe_clamp(curr_u[1], date_bounds[0], date_bounds[1])
+                                    if c_start > c_end: c_start = c_end
+                                    
+                                    # Update state if clamped
+                                    clamped_range = (c_start, c_end)
+                                    st.session_state[usage_state_key] = clamped_range
+
+                                    # Detect if the user already changed the widget this run (widget key is separate)
+                                    pending_user_change = bool(
+                                        usage_widget_key
+                                        and usage_widget_key in st.session_state
+                                        and st.session_state[usage_widget_key] != st.session_state[usage_state_key]
                                     )
-                                    normalized_auto = _normalize_date_range(auto_usage_range) if auto_usage_range else None
-                                    last_auto_range = _get_last_auto_range(usage_state_key)
-                                    current_usage_range = st.session_state[usage_state_key]
-                                    override_on = _usage_override_enabled(usage_state_key)
 
-                                    if normalized_auto:
-                                        # Auto-sync when override is off or when the stored range is stale (default or prior auto)
-                                        should_force_auto = (
-                                            not override_on
-                                            or (last_auto_range and tuple(current_usage_range) == tuple(last_auto_range))
-                                        )
-                                        if should_force_auto:
-                                            st.session_state[usage_state_key] = normalized_auto
-                                            if usage_input_key:
-                                                st.session_state[usage_input_key] = normalized_auto
-                                            _set_usage_override(usage_state_key, False)
-                                        _set_last_auto_range(usage_state_key, normalized_auto)
-
+                                    # Override Logic
+                                    # If override is NOT active and the user hasn't changed the widget, sync to auto range
+                                    if auto_usage_range and not _usage_override_enabled(usage_state_key, usage_override_key) and not pending_user_change:
+                                        st.session_state[usage_state_key] = auto_usage_range
+                                    
                                     st.markdown("#### Adjust usage date range")
-                                    usage_range = st.date_input(
-                                        "Usage date range",
-                                        value=st.session_state[usage_state_key],
-                                        min_value=date_bounds[0],
-                                        max_value=date_bounds[1],
-                                        key=usage_input_key,
-                                        label_visibility="collapsed",
-                                    )
-                                    normalized_usage_range = _normalize_date_range(usage_range)
-                                    if tuple(normalized_usage_range) != tuple(st.session_state.get(usage_state_key)):
-                                        st.session_state[usage_state_key] = normalized_usage_range
-                                        _set_usage_override(usage_state_key, True)
-                                        if usage_input_key:
-                                            st.session_state[usage_input_key] = normalized_usage_range
-                                        if tuple(usage_range) != tuple(normalized_usage_range):
+                                    
+                                    current_usage_range = st.session_state[usage_state_key]
+                                    date_input_kwargs = {
+                                        "label": "Usage date range",
+                                        "min_value": date_bounds[0],
+                                        "max_value": date_bounds[1],
+                                        "key": usage_widget_key,
+                                        "label_visibility": "collapsed",
+                                    }
+                                    if not usage_widget_key or usage_widget_key not in st.session_state:
+                                        date_input_kwargs["value"] = current_usage_range
+                                    new_u_range = st.date_input(**date_input_kwargs)
+
+                                    # Allow explicitly locking the usage range away from the purchase filter
+                                    if usage_override_key:
+                                        checkbox_kwargs = {
+                                            "label": "Lock usage date range (independent from purchase filter)",
+                                            "key": override_widget_key,
+                                            "help": "When locked, changes to the purchase date filter will not reset this usage chart.",
+                                        }
+                                        if not override_widget_key or override_widget_key not in st.session_state:
+                                            checkbox_kwargs["value"] = _usage_override_enabled(usage_state_key, usage_override_key)
+                                        locked_usage = st.checkbox(**checkbox_kwargs)
+                                        _set_usage_override(usage_state_key, usage_override_key, locked_usage)
+                                    
+                                    # Detect User Change
+                                    if new_u_range != st.session_state[usage_state_key]:
+                                        if isinstance(new_u_range, (tuple, list)) and len(new_u_range) == 2:
+                                            st.session_state[usage_state_key] = new_u_range
+                                            _set_usage_override(usage_state_key, usage_override_key, True) # User touched it -> Lock it
                                             st.rerun()
-                                    start_date, end_date = st.session_state[usage_state_key]
-                                    start_dt = pd.to_datetime(start_date) if start_date else pd.NaT
-                                    end_dt = pd.to_datetime(end_date) if end_date else pd.NaT
+                                    
+                                    u_start, u_end = st.session_state[usage_state_key]
+                                    start_dt = pd.to_datetime(u_start)
+                                    end_dt = pd.to_datetime(u_end)
                                 elif auto_usage_range:
-                                    start_dt = pd.to_datetime(auto_usage_range[0]) if auto_usage_range else start_dt
-                                    end_dt = pd.to_datetime(auto_usage_range[1]) if auto_usage_range else end_dt
+                                    start_dt = pd.to_datetime(auto_usage_range[0])
+                                    end_dt = pd.to_datetime(auto_usage_range[1])
+
 
                                 usage_start = start_dt.normalize() if pd.notna(start_dt) else (
                                     pd.to_datetime(data_df["TransactionDate"].min()).normalize() if "TransactionDate" in data_df.columns else pd.NaT
@@ -2531,7 +2549,16 @@ try:
                                             )
                                             if range_notice:
                                                 st.caption(range_notice)
-                                            st.altair_chart(usage_chart, width="stretch")
+                                            # Layout: Chart (Left) + Stats (Right)
+                                            u_col_chart, u_col_stats = st.columns([3, 1])
+                                            with u_col_chart:
+                                                st.altair_chart(usage_chart, width="stretch")
+                                            
+                                            with u_col_stats:
+                                                st.markdown("##### 📦 Usage Summary")
+                                                total_usage = filtered_udf['UsageQty'].sum() if not filtered_udf.empty else 0
+                                                st.metric("Total Usage", f"{total_usage:,.0f}")
+                                                st.caption(f"Over {len(filtered_udf)} months")
                                         else:
                                             range_notice = None
                                             filtered_daily = udf
@@ -2594,7 +2621,16 @@ try:
                                             )
                                             if range_notice:
                                                 st.caption(range_notice)
-                                            st.altair_chart(usage_chart, width="stretch")
+                                            # Layout: Chart (Left) + Stats (Right)
+                                            u_col_chart, u_col_stats = st.columns([3, 1])
+                                            with u_col_chart:
+                                                st.altair_chart(usage_chart, width="stretch")
+                                            
+                                            with u_col_stats:
+                                                st.markdown("##### 📦 Usage Summary")
+                                                total_usage = filtered_daily['UsageQty'].sum() if not filtered_daily.empty else 0
+                                                st.metric("Total Usage", f"{total_usage:,.0f}")
+                                                st.caption(f"Over {len(filtered_daily)} days")
                                     else:
                                         st.info("No usage history available.")
                                 else:
@@ -2612,9 +2648,10 @@ try:
                                     with tabs[0]:
                                         render_price_chart(
                                             filtered_hist_df,
+                                            safe_clamp,
                                             start_date,
                                             end_date,
-                                            date_bounds=default_range,
+                                            date_bounds=(min_dt, max_dt),
                                             usage_state_key=range_usage_state_key,
                                             usage_override_key=range_usage_override_key,
                                             usage_input_key=range_usage_key,
@@ -2626,19 +2663,21 @@ try:
                                             vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == vendor]
                                             render_price_chart(
                                             vendor_df,
+                                            safe_clamp,
                                             start_date,
                                             end_date,
-                                            date_bounds=default_range,
+                                            date_bounds=(min_dt, max_dt),
                                             usage_state_key=f"{range_usage_state_key}_{vendor}",
-                                            usage_override_key=range_usage_override_key,
+                                            usage_override_key=f"{range_usage_override_key}_{vendor}",
                                             usage_input_key=f"{range_usage_key}_{vendor}",
                                         )
                                 else:
                                     render_price_chart(
                                         filtered_hist_df,
+                                        safe_clamp,
                                         start_date,
                                         end_date,
-                                        date_bounds=default_range,
+                                        date_bounds=(min_dt, max_dt),
                                         usage_state_key=range_usage_state_key,
                                         usage_override_key=range_usage_override_key,
                                         usage_input_key=range_usage_key,
@@ -2646,9 +2685,10 @@ try:
                             else:
                                 render_price_chart(
                                     filtered_hist_df,
+                                    safe_clamp,
                                     start_date,
                                     end_date,
-                                    date_bounds=default_range,
+                                    date_bounds=(min_dt, max_dt),
                                     usage_state_key=range_usage_state_key,
                                     usage_override_key=range_usage_override_key,
                                     usage_input_key=range_usage_key,
