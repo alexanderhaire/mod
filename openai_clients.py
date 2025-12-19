@@ -948,18 +948,24 @@ def call_openai_structured_market_data(
     }
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-    try:
-        response = requests.post(OPENAI_CHAT_URL, headers=headers, json=payload, timeout=OPENAI_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        response_json = response.json()
-        content = response_json["choices"][0]["message"]["content"]
-        parsed = json.loads(_extract_json_block(content))
-        if usage_snapshot := _build_usage_snapshot(response_json, model):
-            parsed["usage"] = usage_snapshot
-        return parsed
-    except (requests.RequestException, KeyError, json.JSONDecodeError) as err:
-        LOGGER.warning("OpenAI market data generation failed: %s", err)
-        return None
+    import time
+    for attempt in range(3):
+        try:
+            response = requests.post(OPENAI_CHAT_URL, headers=headers, json=payload, timeout=OPENAI_TIMEOUT_SECONDS)
+            response.raise_for_status()
+            
+            response_json = response.json()
+            content = response_json["choices"][0]["message"]["content"]
+            parsed = json.loads(_extract_json_block(content))
+            if usage_snapshot := _build_usage_snapshot(response_json, model):
+                parsed["usage"] = usage_snapshot
+            return parsed
+            
+        except (requests.RequestException, KeyError, json.JSONDecodeError) as err:
+            if attempt == 2:
+                LOGGER.warning("OpenAI market data generation failed after retries: %s", err)
+                return None
+            time.sleep(1 * (attempt + 1)) # Simple backoff
 
 
 def call_openai_vision_analyst(

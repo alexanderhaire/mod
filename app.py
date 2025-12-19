@@ -52,9 +52,13 @@ from market_insights import (
     fetch_product_inventory_trends,
     simulate_portfolio_variance,
     calculate_black_scholes_put,
-    optimize_capital_allocation
+    optimize_capital_allocation,
+    validate_price_history_quality
 )
+from ml_engine import OnlineLinearRegressor, PortfolioOptimizer
+from portfolio_manager import PortfolioManager
 import fifo_tracker
+from wizard_ui import WizardFlow
 from external_data import (
     get_market_context,
     fetch_agricultural_market_data,
@@ -1183,9 +1187,16 @@ try:
                         st.markdown("### >> BUY_CALENDAR")
                         st.caption("Calendar of recommended buys using coverage, runway, and the optimal price window logic.")
 
-                        # Use the same raw-material classification as Market Monitor
-                        # Ensure specific filtered query is used for the Buy Calendar
-                        # We do NOT use df_market here because it lacks the strict 1-year + vendor history filter
+                        # Initialize wizard for Buy Calendar
+                        buy_wizard = WizardFlow(
+                            "buy_calendar",
+                            steps=["Configure", "Build", "Results"]
+                        )
+                        
+                        # Render step progress
+                        buy_wizard.render_progress()
+                        
+                        # Fetch raw materials (used across steps)
                         df_priority = get_priority_raw_materials(cursor, limit=5000, require_purchase_history=True)
                         
                         if not df_priority.empty:
@@ -1195,90 +1206,152 @@ try:
                                 df_priority['Segment'] = "Raw Material"
                             df_priority['ITEMNMBR'] = df_priority['ITEMNMBR'].astype(str).str.strip()
                             df_priority = df_priority[df_priority['Segment'] == "Raw Material"]
-                            # Removed hard exclusion of "REC" items to ensure consistency with Broker Portal
-
 
                         if df_priority.empty:
                             st.info("No active raw materials found to schedule buy windows.")
                         else:
-                            today = datetime.date.today()
-                            cache_key = _buy_calendar_cache_key(df_priority, today)
-                            refresh_requested = st.button("Refresh buy calendar", key="refresh_buy_calendar")
-                            cache = st.session_state.get("buy_calendar_cache", {})
-
-                            use_cache = (
-                                not refresh_requested
-                                and cache.get("key") == cache_key
-                                and isinstance(cache.get("data"), pd.DataFrame)
-                            )
-
-                            if use_cache:
-                                cal_df = cache.get("data")
-                            else:
+                            # === STEP 1: CONFIGURE ===
+                            if buy_wizard.current_step == 0:
+                                st.markdown("#### ⚙️ Configure Buy Calendar")
+                                
+                                # Item limit selection
+                                item_count = len(df_priority)
+                                item_limit = st.slider(
+                                    "Items to Analyze",
+                                    min_value=10,
+                                    max_value=min(500, item_count),
+                                    value=min(100, item_count),
+                                    step=10,
+                                    help="More items = longer build time"
+                                )
+                                buy_wizard.set_data("item_limit", item_limit)
+                                
+                                # Urgency filter
+                                urgency_filter = st.multiselect(
+                                    "Show Urgency Levels",
+                                    options=["CRITICAL", "WARNING", "OK"],
+                                    default=["CRITICAL", "WARNING", "OK"]
+                                )
+                                buy_wizard.set_data("urgency_filter", urgency_filter)
+                                
+                                st.markdown("---")
+                                st.markdown("**Preview:**")
+                                st.markdown(f"- Analyzing **{item_limit}** raw materials")
+                                st.markdown(f"- Showing urgency: **{', '.join(urgency_filter) if urgency_filter else 'All'}**")
+                                
+                                buy_wizard.render_navigation(next_label="Build Calendar →")
+                            
+                            # === STEP 2: BUILD CALENDAR ===
+                            elif buy_wizard.current_step == 1:
+                                st.markdown("#### 🔄 Building Buy Calendar...")
+                                
+                                item_limit = buy_wizard.data.get("item_limit", 100)
+                                urgency_filter = buy_wizard.data.get("urgency_filter", ["CRITICAL", "WARNING", "OK"])
+                                
+                                today = datetime.date.today()
+                                df_limited = df_priority.head(item_limit)
+                                
                                 progress_bar = st.progress(0, text="Building buy calendar...")
-
+                                
                                 def _update_progress(done, total, item):
                                     progress_bar.progress(done / total, text=f"Scheduling {item}...")
-
-                                cal_df = _build_buy_calendar(cursor, df_priority, today, progress_cb=_update_progress)
+                                
+                                cal_df = _build_buy_calendar(cursor, df_limited, today, progress_cb=_update_progress)
                                 progress_bar.empty()
-                                st.session_state.buy_calendar_cache = {
-                                    "key": cache_key,
-                                    "data": cal_df,
-                                    "built_at": datetime.datetime.utcnow().isoformat(),
-                                }
-
-                            if cal_df is None or cal_df.empty:
-                                st.info("No buy windows could be scheduled with the current data.")
-                            else:
-                                cache_time = (
-                                    cache.get("built_at")
-                                    if use_cache
-                                    else st.session_state.buy_calendar_cache.get("built_at")
-                                )
-                                if cache_time:
-                                    st.caption(f"Using cached schedule from {cache_time} UTC. Refresh to rebuild.")
-
-                                st.markdown("#### UPCOMING BUY SCHEDULE")
-
-                                urgency_colors = {
-                                    'CRITICAL': '#dc322f',
-                                    'WARNING': '#b58900',
-                                    'OK': '#859900'
-                                }
-
-                                for week_start, group in cal_df.groupby('Week'):
-                                    week_label = pd.to_datetime(week_start).strftime("Week of %b %d")
-                                    st.markdown(f"**{week_label}**")
-
-                                    for _, rec in group.iterrows():
-                                        color = urgency_colors.get(str(rec['Urgency']).upper(), '#839496')
-                                        st.markdown(f"""
-                                        <div style="border-left: 4px solid {color}; padding: 8px 12px; margin-bottom: 8px; background: #0a0a0a;">
-                                            <div style="color:#ffb000; font-weight:bold;">{rec['Item']} · {rec['BuyDate'].strftime('%b %d')}</div>
-                                            <div style="color:#839496; font-size:0.9em;">{rec['Description']}</div>
-                                            <div style="color:{color}; font-size:0.85em;">Runway {rec['RunwayDays']:.1f}d | Latest safe {rec['LatestSafe'].strftime('%b %d')}</div>
-                                            <div style="color:#839496; font-size:0.85em;">Price window: {rec['PriceSignal']} ${float(rec['EstPrice']):,.2f} ({float(rec['PriceDelta']):+,.2f}) · Confidence {rec['ConfidencePct']:.0f}%</div>
-                                            <div style="color:#586e75; font-size:0.8em;">{rec['Reason']}</div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-
-                                st.markdown("#### FULL BUY LIST")
-                                display_df = cal_df[['BuyDate', 'LatestSafe', 'Item', 'Description', 'Urgency', 'RunwayDays', 'CoverageDays', 'PriceSignal', 'EstPrice', 'PriceDelta', 'ConfidencePct']].copy()
-                                display_df['BuyDate'] = display_df['BuyDate'].dt.strftime('%b %d')
-                                display_df['LatestSafe'] = display_df['LatestSafe'].dt.strftime('%b %d')
-                                display_df['RunwayDays'] = display_df['RunwayDays'].round(1)
-                                display_df['CoverageDays'] = display_df['CoverageDays'].round(1)
-                                st.dataframe(display_df, hide_index=True, use_container_width=True)
+                                
+                                # Apply urgency filter
+                                if cal_df is not None and not cal_df.empty and urgency_filter:
+                                    cal_df = cal_df[cal_df['Urgency'].str.upper().isin([u.upper() for u in urgency_filter])]
+                                
+                                # Store results
+                                buy_wizard.set_data("cal_df", cal_df)
+                                buy_wizard.set_data("build_complete", True)
+                                buy_wizard.set_data("built_at", datetime.datetime.utcnow().isoformat())
+                                
+                                if cal_df is not None and not cal_df.empty:
+                                    st.success(f"✅ Built schedule with **{len(cal_df)}** buy recommendations!")
+                                else:
+                                    st.warning("No buy windows could be scheduled.")
+                                
+                                buy_wizard.render_navigation(next_label="View Results →")
+                            
+                            # === STEP 3: VIEW RESULTS ===
+                            elif buy_wizard.current_step == 2:
+                                cal_df = buy_wizard.data.get("cal_df")
+                                built_at = buy_wizard.data.get("built_at", "")
+                                
+                                # Header with actions
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    if built_at:
+                                        st.caption(f"Built at {built_at} UTC")
+                                with col2:
+                                    if st.button("🔄 Rebuild", key="buy_cal_restart"):
+                                        buy_wizard.reset()
+                                        st.rerun()
+                                
+                                if cal_df is None or cal_df.empty:
+                                    st.info("No buy windows available. Adjust filters and rebuild.")
+                                else:
+                                    # CSV Export button
+                                    csv_data = cal_df.to_csv(index=False)
+                                    st.download_button(
+                                        label="📥 Download CSV",
+                                        data=csv_data,
+                                        file_name=f"buy_calendar_{datetime.date.today()}.csv",
+                                        mime="text/csv"
+                                    )
+                                    
+                                    st.markdown("#### UPCOMING BUY SCHEDULE")
+                                    
+                                    urgency_colors = {
+                                        'CRITICAL': '#dc322f',
+                                        'WARNING': '#b58900',
+                                        'OK': '#859900'
+                                    }
+                                    
+                                    for week_start, group in cal_df.groupby('Week'):
+                                        week_label = pd.to_datetime(week_start).strftime("Week of %b %d")
+                                        st.markdown(f"**{week_label}**")
+                                        
+                                        for _, rec in group.iterrows():
+                                            color = urgency_colors.get(str(rec['Urgency']).upper(), '#839496')
+                                            st.markdown(f"""
+                                            <div style="border-left: 4px solid {color}; padding: 8px 12px; margin-bottom: 8px; background: #0a0a0a;">
+                                                <div style="color:#ffb000; font-weight:bold;">{rec['Item']} · {rec['BuyDate'].strftime('%b %d')}</div>
+                                                <div style="color:#839496; font-size:0.9em;">{rec['Description']}</div>
+                                                <div style="color:{color}; font-size:0.85em;">Runway {rec['RunwayDays']:.1f}d | Latest safe {rec['LatestSafe'].strftime('%b %d')}</div>
+                                                <div style="color:#839496; font-size:0.85em;">Price window: {rec['PriceSignal']} ${float(rec['EstPrice']):,.2f} ({float(rec['PriceDelta']):+,.2f}) · Confidence {rec['ConfidencePct']:.0f}%</div>
+                                                <div style="color:#586e75; font-size:0.8em;">{rec['Reason']}</div>
+                                            </div>
+                                            """, unsafe_allow_html=True)
+                                    
+                                    st.markdown("#### FULL BUY LIST")
+                                    display_df = cal_df[['BuyDate', 'LatestSafe', 'Item', 'Description', 'Urgency', 'RunwayDays', 'CoverageDays', 'PriceSignal', 'EstPrice', 'PriceDelta', 'ConfidencePct']].copy()
+                                    display_df['BuyDate'] = display_df['BuyDate'].dt.strftime('%b %d')
+                                    display_df['LatestSafe'] = display_df['LatestSafe'].dt.strftime('%b %d')
+                                    display_df['RunwayDays'] = display_df['RunwayDays'].round(1)
+                                    display_df['CoverageDays'] = display_df['CoverageDays'].round(1)
+                                    st.dataframe(display_df, hide_index=True, use_container_width=True)
                     
                     elif view_mode == "Hedge Optimizer":
                         st.markdown("---")
                         st.markdown("### >> HEDGE_OPTIMIZER_BOARD")
                         st.caption("Identify opportunities to improve Sharpe Ratio by hedging top raw material positions.")
 
-                        # Reuse priority fetch logic (Match Buy Calendar Logic)
-                        df_target = get_priority_raw_materials(cursor, limit=5000, require_purchase_history=True)
-
+                        # Initialize wizard for Hedge Optimizer
+                        hedge_wizard = WizardFlow(
+                            "hedge_optimizer",
+                            steps=["Select Scan", "Configure", "Analyze", "Results"]
+                        )
+                        
+                        # Render step progress
+                        hedge_wizard.render_progress()
+                        
+                        # Fetch raw materials once (used across steps)
+                        # Relaxed constraint: Includes items with usage even if not bought recently
+                        df_target = get_priority_raw_materials(cursor, limit=5000, require_purchase_history=False)
+                        
                         if not df_target.empty:
                             if 'ITMCLSCD' in df_target.columns:
                                 df_target['Segment'] = df_target.apply(_get_market_segment, axis=1)
@@ -1286,346 +1359,586 @@ try:
                                 df_target['Segment'] = "Raw Material"
                             df_target['ITEMNMBR'] = df_target['ITEMNMBR'].astype(str).str.strip()
                             df_target = df_target[df_target['Segment'] == "Raw Material"]
+                        
+                        if df_target.empty:
+                            st.info("No active raw materials found for analysis.")
+                        else:
+                            # === STEP 1: SELECT SCAN TYPE ===
+                            if hedge_wizard.current_step == 0:
+                                st.markdown("#### 🎯 Choose Your Analysis Mode")
+                                st.markdown("Select how you want to analyze hedging opportunities:")
+                                
+                                scan_type = st.radio(
+                                    "Scan Type",
+                                    options=["market_scan", "portfolio_scan", "pure_allocator"],
+                                    format_func=lambda x: {
+                                        "market_scan": "📊 Market Scan — Broad opportunity discovery",
+                                        "portfolio_scan": "🏛️ $10,000 Portfolio — Optimize current inventory",
+                                        "pure_allocator": "🧪 Pure Allocator — Theoretical best opportunities"
+                                    }.get(x, x),
+                                    label_visibility="collapsed",
+                                    key="hedge_scan_type"
+                                )
+                                hedge_wizard.set_data("scan_type", scan_type)
+                                
+                                # Description based on selection
+                                descriptions = {
+                                    "market_scan": "Scans your top 50 raw materials to find hedging opportunities. Best for **discovering** what's available.",
+                                    "portfolio_scan": "Focuses on your existing inventory and allocates a $10,000 budget for maximum Sharpe ratio improvement.",
+                                    "pure_allocator": "Ignores current stock levels. Finds the mathematically optimal hedges across 150 items."
+                                }
+                                st.info(descriptions.get(scan_type, ""))
+                                
+                                hedge_wizard.render_navigation(next_label="Configure →")
                             
-                            # START SCAN BUTTONS
-                            col_std, col_max, col_pure = st.columns(3)
-                            with col_std:
-                                run_std = st.button("RUN MARKET SCAN", type="primary", use_container_width=True)
-                            with col_max:
-                                run_max = st.button("RUN $10,000 PORTFOLIO SCAN", type="secondary", use_container_width=True, help="Optimizes internal inventory.")
-                            with col_pure:
-                                run_pure = st.button("RUN PURE ALLOCATOR", type="primary", use_container_width=True, help="Ignores current inventory. Finds absolute best market opportunities.")
+                            # === STEP 2: CONFIGURE PARAMETERS ===
+                            elif hedge_wizard.current_step == 1:
+                                st.markdown("#### ⚙️ Configure Analysis Parameters")
+                                
+                                scan_type = hedge_wizard.data.get("scan_type", "market_scan")
+                                
+                                # Pure Allocator uses ALL items with quality validation (no limit)
+                                if scan_type == "pure_allocator":
+                                    st.info("🧪 **Pure Allocator Mode**: Will analyze ALL items with reliable price history (quality-validated).")
+                                    item_limit = len(df_target)
+                                    hedge_wizard.set_data("item_limit", item_limit)  # No limit
+                                    hedge_wizard.set_data("use_quality_filter", True)
+                                else:
+                                    # Item limit based on scan type
+                                    default_limit = {"market_scan": 50, "portfolio_scan": 100}.get(scan_type, 50)
+                                    
+                                    item_limit = st.slider(
+                                        "Items to Analyze",
+                                        min_value=10,
+                                        max_value=min(200, len(df_target)),
+                                        value=min(default_limit, len(df_target)),
+                                        step=10,
+                                        help="More items = longer analysis time but more opportunities"
+                                    )
+                                    hedge_wizard.set_data("item_limit", item_limit)
+                                    hedge_wizard.set_data("use_quality_filter", False)
+                                
+                                # Sharpe threshold
+                                default_threshold = 2.0 if scan_type in ["portfolio_scan", "pure_allocator"] else 0.0
+                                sharpe_threshold = st.slider(
+                                    "Minimum Sharpe Gain Threshold",
+                                    min_value=0.0,
+                                    max_value=3.0,
+                                    value=default_threshold,
+                                    step=0.1,
+                                    help="Higher threshold = fewer but higher-quality opportunities"
+                                )
+                                hedge_wizard.set_data("sharpe_threshold", sharpe_threshold)
+                                
+                                # Budget (for portfolio modes)
+                                if scan_type in ["portfolio_scan", "pure_allocator"]:
+                                    capital = st.number_input(
+                                        "Investment Budget ($)",
+                                        min_value=1000,
+                                        max_value=100000,
+                                        value=10000,
+                                        step=1000
+                                    )
+                                    hedge_wizard.set_data("capital", capital)
 
-                            # Limit items for analysis - EXPAND FOR MAX/PURE SHARPE
-                            limit = 50 if run_std else 100 
-                            # If running Pure Allocator, we want a broader scan to find opportunities we might not own yet
-                            if run_pure:
-                                limit = 150
+                                    # --- PORTFOLIO MANAGER INTEGRATION ---
+                                    pm = PortfolioManager()
+                                    p_summary = pm.get_portfolio_summary()
+                                    
+                                    st.markdown("### 💰 Capital Management")
+                                    with st.expander(f"Current Portfolio Value: ${p_summary['Total Value']:,.2f}", expanded=False):
+                                        st.metric("Available Cash", f"${p_summary['Cash']:,.2f}")
+                                        st.metric("Invested Assets", f"${p_summary['Invested']:,.2f}")
+                                        
+                                        dep_col1, dep_col2 = st.columns([2, 1])
+                                        with dep_col1:
+                                            deposit_amt = st.number_input("Deposit Amount ($)", min_value=0.0, step=1000.0, key="pm_deposit")
+                                        with dep_col2:
+                                            if st.button("Add Funds"):
+                                                if pm.deposit_capital(deposit_amt):
+                                                    st.success(f"Deposited ${deposit_amt:,.2f}!")
+                                                    st.rerun()
+                                        
+                                        if st.button("Use Available Cash for Budget"):
+                                            # Update session budget to match available cash
+                                             hedge_wizard.set_data("capital", float(p_summary['Cash']))
+                                             st.rerun()
+                                
+                                st.markdown("---")
+                                st.markdown("**Summary:**")
+                                st.markdown(f"- Analyzing **{item_limit}** items")
+                                st.markdown(f"- Min Sharpe threshold: **{sharpe_threshold}**")
+                                if scan_type in ["portfolio_scan", "pure_allocator"]:
+                                    st.markdown(f"- Budget: **${hedge_wizard.data.get('capital', 10000):,}**")
+                                
+                                hedge_wizard.render_navigation(next_label="Run Analysis →")
                             
-                            if len(df_target) > limit:
-                                df_target = df_target.head(limit)
-
-                            if df_target.empty:
-                                st.info("No active raw materials found for analysis.")
-                            
-                            if (run_std or run_max or run_pure) and not df_target.empty:
-                                # Configuration based on scan mode
-                                init_threshold = 2.0 if (run_max or run_pure) else 0.0
-                                init_capital = 10000.0
+                            # === STEP 3: RUN ANALYSIS ===
+                            elif hedge_wizard.current_step == 2:
+                                st.markdown("#### 🔄 Running Analysis...")
+                                
+                                # Get config from previous steps
+                                scan_type = hedge_wizard.data.get("scan_type", "market_scan")
+                                item_limit = hedge_wizard.data.get("item_limit", 50)
+                                sharpe_threshold = hedge_wizard.data.get("sharpe_threshold", 0.0)
+                                capital = hedge_wizard.data.get("capital", 10000.0)
+                                use_quality_filter = hedge_wizard.data.get("use_quality_filter", False)
+                                
+                                
+                                # Pure Allocator: analyze global futures universe directly
+                                if scan_type == "pure_allocator":
+                                    st.info("🧪 **Pure Allocator Mode**: Analyzing global correlation matrix for Max Sharpe...")
+                                    df_analysis = pd.DataFrame() # Skip raw material loop
+                                else:
+                                    df_analysis = df_target.head(item_limit)
                                 
                                 candidates = []
+                                skipped_items = []  # Track items skipped due to quality filter
                                 progress_bar = st.progress(0, text="Initializing Market Scanner...")
-
+                                status_text = st.empty()
                                 
-                                # Pre-fetch pool once
+                                # --- BRANCH: PURE ALLOCATOR (Global Optimization) ---
+                                if scan_type == "pure_allocator":
+                                    status_text.text("Fetching Global Futures Universe...")
+                                    # Use the predefined universe from constants
+                                    # Fetch 2 years of data for robust correlation/volatility
+                                    pool_data = fetch_market_data_pool(FUTURES_UNIVERSE, timeframe='2y')
+                                    
+                                    if pool_data:
+                                        status_text.text("Calculating Correlation Matrix & Efficient Frontier...")
+                                        
+                                        # 1. Clean Data & Calculate Returns
+                                        prices_df = pd.DataFrame(pool_data).fillna(method='ffill').fillna(method='bfill')
+                                        # Ensure we have enough history
+                                        if len(prices_df) > 50:
+                                            returns_df = prices_df.pct_change().dropna()
+                                            
+                                            # 2. Run Optimizer
+                                            optimizer = PortfolioOptimizer(returns_df)
+                                            result = optimizer.optimize_max_sharpe_ratio()
+                                            
+                                            # 3. Format Candidates
+                                            # We convert the portfolio weights directly into "candidates"
+                                            p_sharpe = result.get('Sharpe', 0.0)
+                                            p_ret = result.get('Return', 0.0)
+                                            p_vol = result.get('Volatility', 0.0)
+                                            
+                                            for ticker, weight in result.get('Weights', {}).items():
+                                                if weight < 0.01: continue # Ignore small dust
+                                                
+                                                candidates.append({
+                                                    "Item": ticker,
+                                                    "Description": "Global Market Instrument", # Placeholder
+                                                    "Best Hedge": ticker,
+                                                    "Correlation": 1.0,
+                                                    "Hedge Ratio": 1.0,
+                                                    "Current Sharpe": 0.0, # N/A
+                                                    "Optimal Sharpe": p_sharpe,
+                                                    "Sharpe Gain": p_sharpe, # Pure gain from 0
+                                                    "Vol Reduction": 0.0,
+                                                    "Allocation %": weight, # Pre-calculated exact weight
+                                                    "Score": weight * 100 
+                                                })
+                                    progress_bar.progress(100, text="Optimization Complete.")
+                                
+                                # --- BRANCH: STANDARD SCANS (Item-by-Item Analysis) ---
+                                else:  
+                                    total_items = len(df_analysis)
+                                
+                                # Pre-fetch futures pool
                                 with st.spinner("Fetching global futures data..."):
-                                     pool_data = fetch_market_data_pool(FUTURES_UNIVERSE, timeframe='1y')
-
-                                total_items = len(df_target)
-                                for idx, row in df_target.iterrows():
+                                    pool_data = fetch_market_data_pool(FUTURES_UNIVERSE, timeframe='1y')
+                                
+                                total_items = len(df_analysis)
+                                for idx, (_, row) in enumerate(df_analysis.iterrows()):
                                     item_num = str(row['ITEMNMBR']).strip()
                                     item_desc = str(row.get('ITEMDESC', ''))
                                     
                                     progress_bar.progress((idx + 1) / total_items, text=f"Analyzing {item_num}...")
                                     
-                                    # Get Price History (Internal)
-                                    # Use fetch_product_price_history for specific item history
-                                    # Fetch time series (1 year history for correlation)
                                     history_list = fetch_product_price_history(cursor, item_num, days=365)
                                     
+                                    # Pure Allocator: Apply quality validation
+                                    if use_quality_filter:
+                                        quality = validate_price_history_quality(history_list, min_records=6)
+                                        if not quality['is_reliable']:
+                                            skipped_items.append(item_num)
+                                            continue  # Skip unreliable items
+                                        data_confidence = quality['confidence']
+                                    else:
+                                        data_confidence = 1.0  # Default for non-quality-filtered modes
+                                    
                                     if history_list:
-                                         # Run Smart Correlation
-                                         best_fit = find_optimal_hedging_asset(history_list, pool_data)
-                                         
-                                         if best_fit and best_fit.get('metrics'):
-                                             metrics = best_fit['metrics']
-                                             curr_sharpe = metrics.get('current_sharpe', 0)
-                                             opt_sharpe = metrics.get('optimal_sharpe', 0)
-                                             sharpe_gap = opt_sharpe - curr_sharpe
-                                             
-                                             # Filter for meaningful opportunities (Positive Sharpe Gain only)
-                                             if sharpe_gap > 0:
-                                                  # Get Inventory for Action sizing
-                                                  inv_data = fetch_product_inventory_trends(cursor, item_num)
-                                                  inv_value = inv_data.get('InventoryValue', 0) or 0
-                                                  hedge_ratio = metrics.get('optimal_hedge_ratio', 0)
-                                                  
-                                                  short_amt = inv_value * abs(hedge_ratio)
-                                                  
-                                                  candidates.append({
-                                                      "Item": item_num,
-                                                      "Description": item_desc,
-                                                      "Inventory Value": inv_value,
-                                                      "Best Hedge": best_fit['best_asset'],
-                                                      "Correlation": metrics.get('correlation', 0),
-                                                      "Hedge Ratio": f"{hedge_ratio*100:.0f}%",
-                                                      "Short Amount": short_amt, # Store float for sorting
-                                                      "Current Sharpe": curr_sharpe, # Store float for math
-                                                      "Optimal Sharpe": opt_sharpe, # Store float for math
-                                                      "Sharpe Gain": sharpe_gap,
-                                                      "Vol Reduction": metrics.get('volatility_reduction', 0)
-                                                  })
+                                        best_fit = find_optimal_hedging_asset(history_list, pool_data)
+                                        
+                                        if best_fit and best_fit.get('metrics'):
+                                            metrics = best_fit['metrics']
+                                            curr_sharpe = metrics.get('current_sharpe', 0)
+                                            opt_sharpe = metrics.get('optimal_sharpe', 0)
+                                            sharpe_gap = opt_sharpe - curr_sharpe
+                                            
+                                            if sharpe_gap > 0:
+                                                inv_data = fetch_product_inventory_trends(cursor, item_num)
+                                                inv_value = inv_data.get('InventoryValue', 0) or 0
+                                                hedge_ratio = metrics.get('optimal_hedge_ratio', 0)
+                                                
+                                                candidates.append({
+                                                    "Item": item_num,
+                                                    "Description": item_desc,
+                                                    "Inventory Value": inv_value,
+                                                    "Best Hedge": best_fit['best_asset'],
+                                                    "Correlation": metrics.get('correlation', 0),
+                                                    "Hedge Ratio": f"{hedge_ratio*100:.0f}%",
+                                                    "Short Amount": inv_value * abs(hedge_ratio),
+                                                    "Current Sharpe": curr_sharpe,
+                                                    "Optimal Sharpe": opt_sharpe,
+                                                    "Sharpe Gain": sharpe_gap,
+                                                    "Vol Reduction": metrics.get('volatility_reduction', 0)
+                                                })
                                 
                                 progress_bar.empty()
                                 
+                                # Store results in wizard data
+                                hedge_wizard.set_data("candidates", candidates)
+                                hedge_wizard.set_data("analysis_complete", True)
+                                
                                 if candidates:
-                                    # Filter Logic for "High Conviction" vs "Broad Coverage"
-                                    st.markdown("### 🎯 HEDGE SELECTIVITY")
-                                    sharpe_threshold = st.slider(
-                                        "Minimum Sharpe Threshold (Filter out low-quality hedges)", 
-                                        min_value=0.0, 
-                                        max_value=3.0, 
-                                        value=init_threshold, 
-                                        step=0.1,
-                                        help="Increase this to only trade the 'Best of the Best'. This will raise your Portfolio Sharpe but lower your Total Hedged Value."
-                                    )
-                                    
-                                    # Filter candidates based on threshold
+                                    st.success(f"✅ Analysis complete! Found **{len(candidates)}** potential opportunities.")
+                                    st.markdown("Click **View Results** to see the detailed breakdown.")
+                                else:
+                                    st.warning("No hedging opportunities found matching your criteria.")
+                                
+                                hedge_wizard.render_navigation(next_label="View Results →")
+                            
+                            # === STEP 4: RESULTS ===
+                            elif hedge_wizard.current_step == 3:
+                                candidates = hedge_wizard.data.get("candidates", [])
+                                scan_type = hedge_wizard.data.get("scan_type", "market_scan")
+                                sharpe_threshold = hedge_wizard.data.get("sharpe_threshold", 0.0)
+                                capital = hedge_wizard.data.get("capital", 10000.0)
+                                
+                                # Reset button
+                                if st.button("🔄 Start New Analysis", key="hedge_reset"):
+                                    hedge_wizard.reset()
+                                    st.rerun()
+                                
+                                if not candidates:
+                                    st.info("No opportunities found. Try adjusting your parameters.")
+                                else:
+                                    # Build results DataFrame
                                     results_df = pd.DataFrame(candidates)
                                     results_df = results_df[results_df['Sharpe Gain'] >= sharpe_threshold]
                                     results_df = results_df.sort_values("Sharpe Gain", ascending=False)
                                     
                                     if results_df.empty:
-                                         st.warning(f"No opportunities found with Sharpe Gain > {sharpe_threshold}. Try lowering the threshold.")
+                                        st.warning(f"No opportunities with Sharpe Gain ≥ {sharpe_threshold}. Adjust threshold in Step 2.")
                                     else:
-                                        st.success(f"Found {len(results_df)} " + ("high-conviction " if sharpe_threshold > 1.5 else "") + "hedging opportunities!")
+                                        st.success(f"Found **{len(results_df)}** hedging opportunities!")
                                         
+                                        # Format for display
+                                        display_df = results_df.copy()
+                                        display_df['Inventory Value'] = display_df['Inventory Value'].apply(lambda x: f"${x:,.0f}")
+                                        display_df['Short Amount'] = display_df['Short Amount'].apply(lambda x: f"${x:,.0f}")
+                                        display_df['Vol Reduction'] = display_df['Vol Reduction'].apply(lambda x: f"{x:.1f}%")
+                                        display_df['Current Sharpe'] = display_df['Current Sharpe'].apply(lambda x: f"{x:.2f}")
+                                        display_df['Optimal Sharpe'] = display_df['Optimal Sharpe'].apply(lambda x: f"{x:.2f}")
                                         
-                                    # Format for display (SHARED)
-                                    display_df = results_df.copy()
-                                    display_df['Inventory Value'] = display_df['Inventory Value'].apply(lambda x: f"${x:,.0f}")
-                                    display_df['Short Amount'] = display_df['Short Amount'].apply(lambda x: f"${x:,.0f}")
-                                    display_df['Vol Reduction'] = display_df['Vol Reduction'].apply(lambda x: f"{x:.1f}%")
-                                    display_df['Current Sharpe'] = display_df['Current Sharpe'].apply(lambda x: f"{x:.2f}")
-                                    display_df['Optimal Sharpe'] = display_df['Optimal Sharpe'].apply(lambda x: f"{x:.2f}")
-
-                                    # --- DISPLAY LOGIC SEPARATION ---
-                                    # --- DISPLAY LOGIC SEPARATION ---
-                                    if run_max:
-                                        # === MAX SHARPE PORTFOLIO (Use Inventory Weights) ===
-                                        st.markdown("### 🏛️ $10,000 CAPITAL BLUEPRINT (PORTFOLIO WEIGHTED)")
-                                        
-                                        blueprint_df = optimize_capital_allocation(candidates, total_capital=init_capital)
-                                        if not blueprint_df.empty:
-                                            st.success(f"Generated Max Sharpe Strategy for ${init_capital:,.0f} Budget")
+                                        # Display based on scan type
+                                        if scan_type == "portfolio_scan":
+                                            st.markdown("### 🏛️ CAPITAL BLUEPRINT (PORTFOLIO WEIGHTED)")
+                                            blueprint_df = optimize_capital_allocation(candidates, total_capital=capital)
+                                            if not blueprint_df.empty:
+                                                st.success(f"Generated Max Sharpe Strategy for ${capital:,.0f} Budget")
+                                                col_b1, col_b2 = st.columns([2, 1])
+                                                with col_b1:
+                                                    bp_display = blueprint_df.copy()
+                                                    bp_display['Allocated Capital'] = bp_display['Allocated Capital'].apply(lambda x: f"${x:,.2f}")
+                                                    bp_display['Allocation %'] = bp_display['Allocation %'].apply(lambda x: f"{x:.1%}")
+                                                    bp_display['Sharpe Gain'] = bp_display['Sharpe Gain'].apply(lambda x: f"+{x:.2f}")
+                                                    st.dataframe(bp_display, use_container_width=True, hide_index=True)
+                                                with col_b2:
+                                                    st.info("Optimized for your CURRENT inventory risks.")
                                             
-                                            col_b1, col_b2 = st.columns([2, 1])
-                                            with col_b1:
+                                            st.markdown("### 💎 HIGH CONVICTION OPPORTUNITIES")
+                                            st.dataframe(
+                                                display_df.style.format({"Sharpe Gain": "{:+.2f}"}).background_gradient(subset=["Sharpe Gain"], cmap="Greens"),
+                                                use_container_width=True,
+                                                hide_index=True
+                                            )
+                                        
+                                        elif scan_type == "pure_allocator":
+                                            st.markdown("### 🧪 PURE ALLOCATOR (THEORETICAL MODEL)")
+                                            
+                                            if candidates:
+                                                blueprint_df = pd.DataFrame(candidates)
+                                                # Calculate capital
+                                                blueprint_df['Allocated Capital'] = blueprint_df['Allocation %'] * capital
+                                                
+                                                # Sort by weight
+                                                blueprint_df = blueprint_df.sort_values('Allocated Capital', ascending=False)
+                                                
+                                                st.success(f"Generated Theoretical Max Sharpe Portfolio for ${capital:,.0f}")
+                                                
+                                                col_b1, col_b2 = st.columns([2, 1])
+                                                with col_b1:
+                                                    bp_display = blueprint_df.copy()
+                                                    bp_display = bp_display[['Item', 'Allocation %', 'Allocated Capital']]
+                                                    bp_display['Allocated Capital'] = bp_display['Allocated Capital'].apply(lambda x: f"${x:,.2f}")
+                                                    bp_display['Allocation %'] = bp_display['Allocation %'].apply(lambda x: f"{x:.1%}")
+                                                    # bp_display['Sharpe Gain'] = bp_display['Sharpe Gain'].apply(lambda x: f"+{x:.2f}")
+                                                    st.dataframe(bp_display, use_container_width=True, hide_index=True)
+                                                    
+                                                with col_b2:
+                                                    st.info("Ignores current stock — pure math optimization.")
+                                                    st.markdown(f"**Est. Sharpe Ratio:** {candidates[0]['Optimal Sharpe']:.2f}")
+                                                
+                                                # EXECUTION BUTTON
+                                                st.divider()
+                                                pm = PortfolioManager()
+                                                cash_avail = pm.state['cash']
+                                                
+                                                e_c1, e_c2 = st.columns([3, 1])
+                                                with e_c1:
+                                                    st.markdown(f"**Available for Deployment:** ${cash_avail:,.2f}")
+                                                    if cash_avail < capital * 0.9:
+                                                        st.warning(f"⚠️ Insufficient Cash! You need ${capital:,.2f} but have ${cash_avail:,.2f}. Trades will be scaled down.")
+                                                
+                                                with e_c2:
+                                                    if st.button("🚀 EXECUTE TRADES", type="primary"):
+                                                        if pm.execute_rebalancing(blueprint_df):
+                                                            st.balloons()
+                                                            st.success("✅ TRADES EXECUTED! Portfolio updated.")
+                                                            st.caption("See 'Capital Management' tab for new holdings.")
+                                                            
+                                            else:
+                                                st.warning("Optimization failed to find a valid portfolio.")
+                                            
+                                            st.markdown("---")
+                                            st.markdown("### 🏆 THE IDEAL HEDGE PORTFOLIO (AGGREGATED)")
+                                            st.caption("Consolidated trade instructions to hedge all identified risks.")
+                                            
+                                            # Aggregate recommendations by Hedge Asset
+                                            portfolio_agg = results_df.groupby("Best Hedge")[["Short Amount"]].sum().reset_index()
+                                            portfolio_agg = portfolio_agg.sort_values("Short Amount", ascending=False)
+                                            total_short = portfolio_agg["Short Amount"].sum()
+                                            
+                                            if total_short > 0:
+                                                portfolio_agg["Allocation %"] = portfolio_agg["Short Amount"] / total_short
+                                                
                                                 # Format for display
-                                                bp_display = blueprint_df.copy()
-                                                bp_display['Allocated Capital'] = bp_display['Allocated Capital'].apply(lambda x: f"${x:,.2f}")
-                                                bp_display['Allocation %'] = bp_display['Allocation %'].apply(lambda x: f"{x:.1%}")
-                                                bp_display['Sharpe Gain'] = bp_display['Sharpe Gain'].apply(lambda x: f"+{x:.2f}")
-                                                st.dataframe(bp_display, use_container_width=True, hide_index=True)
+                                                agg_display = portfolio_agg.copy()
+                                                agg_display["Action"] = "SHORT"  # Hedging implies shorting the correlate
+                                                agg_display["Short Amount"] = agg_display["Short Amount"].apply(lambda x: f"${x:,.2f}")
+                                                agg_display["Allocation %"] = agg_display["Allocation %"].apply(lambda x: f"{x:.1%}")
                                                 
-                                            with col_b2:
-                                                st.info("This concentrated portfolio targets the highest Sharpe efficiency based on your CURRENT inventory risks.")
-                                        else:
-                                            st.warning("No high-conviction trades found for this budget.")
-                                            
-                                        st.markdown("### 💎 HIGH CONVICTION OPPORTUNITIES")
-                                        st.dataframe(
-                                            display_df.style.format({"Sharpe Gain": "{:+.2f}"}).background_gradient(subset=["Sharpe Gain"], cmap="Greens"),
-                                            use_container_width=True,
-                                            hide_index=True
-                                        )
-
-                                    elif run_pure:
-                                        # === PURE ALLOCATOR (Ignore Inventory, Pure Sharpe) ===
-                                        st.markdown("### 🧪 PURE $10,000 ALLOCATOR (THEORETICAL MODEL)")
-                                        
-                                        # Recalculate 'Score' for pure allocator to ignore Inventory Value weighting if it exists inside optimize_capital_allocation?
-                                        # Actually optimize_capital_allocation uses 'Sharpe Gain' * 'Vol Reduction'. 
-                                        # It does NOT use Inventory Value. So it is ALREADY a pure allocator!
-                                        # The difference is just the context we present it in.
-                                        
-                                        blueprint_df = optimize_capital_allocation(candidates, total_capital=init_capital)
-                                        
-                                        if not blueprint_df.empty:
-                                            st.success(f"Generated Theoretical Max Sharpe Portfolio for ${init_capital:,.0f}")
-                                            
-                                            col_b1, col_b2 = st.columns([2, 1])
-                                            with col_b1:
-                                                bp_display = blueprint_df.copy()
-                                                bp_display['Allocated Capital'] = bp_display['Allocated Capital'].apply(lambda x: f"${x:,.2f}")
-                                                bp_display['Allocation %'] = bp_display['Allocation %'].apply(lambda x: f"{x:.1%}")
-                                                bp_display['Sharpe Gain'] = bp_display['Sharpe Gain'].apply(lambda x: f"+{x:.2f}")
-                                                st.dataframe(bp_display, use_container_width=True, hide_index=True)
+                                                # Reorder columns
+                                                agg_display = agg_display[["Best Hedge", "Action", "Short Amount", "Allocation %"]]
                                                 
-                                            with col_b2:
-                                                st.info("This logic ignores your current stock and blindly picks the mathematically best risk/reward assets available.")
-                                        
-                                        st.markdown("### 💎 TOP MARKET OPPORTUNITIES")
-                                        st.dataframe(
-                                            display_df.style.format({"Sharpe Gain": "{:+.2f}"}).background_gradient(subset=["Sharpe Gain"], cmap="Greens"),
-                                            use_container_width=True,
-                                            hide_index=True
-                                        )
-
-                                    else:
-
-                                        # === STANDARD MARKET SCAN ===
-                                        # Show broad opportunities, metrics, and hide blueprint
-                                        
-                                        # Metric Summary
-                                        top_gain = results_df.iloc[0]
-                                        total_hedge_opp = results_df['Short Amount'].sum()
-                                        
-                                        m1, m2, m3, m4 = st.columns(4)
-                                        m1.metric("Highest Opportunity", top_gain['Item'], f"+{top_gain['Sharpe Gain']:.2f} Sharpe")
-                                        m2.metric("Most Common Hedge", results_df['Best Hedge'].mode()[0])
-                                        m3.metric("Total Hedge Value", f"${total_hedge_opp:,.0f}")
-                                        m4.metric("Avg Vol Reduction", f"-{results_df['Vol Reduction'].mean():.1f}%")
-                                        
-                                        st.markdown("### OPPORTUNITY LIST")
-                                        st.dataframe(
-                                            display_df.style.format({"Sharpe Gain": "{:+.2f}"}).background_gradient(subset=["Sharpe Gain"], cmap="Greens"),
-                                            use_container_width=True,
-                                            hide_index=True
-                                        )
-                                        
-                                        # Optional: Show 'Hedge Selectivity' slider only here? 
-                                        # User said "only show things related to that". 
-                                        # Blueprint is NOT shown here.
-
-                                    
-                                    # --- MONTE CARLO SECTION ---
-                                    st.markdown("---")
-                                    st.markdown("### 🎲 HEDGE IMPACT SIMULATION (6 MONTHS)")
-                                    
-                                    # Prepare parameters
-                                    total_portfolio_value = results_df['Inventory Value'].sum()
-                                    if total_portfolio_value > 0:
-                                        # Estimate aggregate volatility stats
-                                        # Baseline Volatility Assumption: 25% (Typical for unhedged raw materials)
-                                        unhedged_vol_assumed = 0.25 
-                                        
-                                        # Calculate Weighted Average Volatility Reduction & Drift
-                                        # Weight by Inventory Value for accuracy
-                                        total_weight = results_df['Inventory Value'].sum()
-                                        
-                                        if total_weight > 0:
-                                            weighted_vol_red = (results_df['Vol Reduction'] * results_df['Inventory Value']).sum() / total_weight
-                                            # Calculate Implied Drift from Optimal Sharpe (Drift = Sharpe * Vol)
-                                            # We assume individual item vol is approx equal to assumed vol for this estimation
-                                            # This is a rough proxy to align portfolio drift with the high sharpe opportunities found
-                                            weighted_sharpe_opt = (results_df['Optimal Sharpe'] * results_df['Inventory Value']).sum() / total_weight
-                                        else:
-                                            weighted_vol_red = results_df['Vol Reduction'].mean()
-                                            weighted_sharpe_opt = results_df['Optimal Sharpe'].mean()
+                                                st.dataframe(agg_display, use_container_width=True, hide_index=True)
+                                                
+                                                # CSV Download
+                                                csv = agg_display.to_csv(index=False).encode('utf-8')
+                                                st.download_button(
+                                                    "📥 Download Trade List (CSV)",
+                                                    csv,
+                                                    "ideal_hedge_portfolio.csv",
+                                                    "text/csv",
+                                                    key='download-hedge-csv'
+                                                )
                                             
-                                        hedged_vol_sim = unhedged_vol_assumed * (1 - (weighted_vol_red / 100.0))
-                                        
-                                        # Derive Portfolio Drift from Weighted Optimal Sharpe
-                                        # mu = Sharpe * sigma
-                                        # We use this as the 'Optimized' drift. For Unhedged, we use a lower baseline.
-                                        hedged_drift_assumed = weighted_sharpe_opt * hedged_vol_sim
-                                        # Clamp drift to reasonable bounds to prevent exploding charts (e.g. max 50% annual)
-                                        hedged_drift_assumed = min(hedged_drift_assumed, 0.50)
-                                        
-                                        # Unhedged Drift: Assume it's lower or standard market return (5%)
-                                        # Or better, derive it from 'Current Sharpe' if available (which was 0 in user table)
-                                        unhedged_drift_assumed = 0.05 
-                                        
-                                        st.caption(f"Simulating 1,000 market scenarios. Baseline Vol: {unhedged_vol_assumed*100:.1f}% → Hedged Vol: {hedged_vol_sim*100:.1f}%")
-                                        
-                                        # Use refactored function receiving dict
-                                        sim_results = simulate_portfolio_variance(
-                                            current_value=total_portfolio_value,
-                                            unhedged_vol=unhedged_vol_assumed,
-                                            hedged_vol=hedged_vol_sim,
-                                            mu=hedged_drift_assumed, # Use higher drift to reflect the 'Optimal' nature
-                                            months=6
-                                        )
-                                        
-                                        if sim_results:
-                                            # --- CHART 1: DENSITY (RISK) ---
-                                            dist_df = sim_results['distribution']
+
+
+                                            # === ML OPTIMIZATION (Frontier) ===
+                                            st.markdown("---")
+                                            st.markdown("### 🧠 ML PORTFOLIO OPTIMIZATION")
+                                            st.caption("Use Monte Carlo simulation to find the mathematical 'Efficient Frontier' of your hedge portfolio.")
                                             
-                                            d_chart = alt.Chart(dist_df).transform_density(
-                                                'Value',
-                                                groupby=['Scenario'],
-                                                as_=['Value', 'Density']
-                                            ).mark_area(
-                                                opacity=0.5
-                                            ).encode(
-                                                alt.X('Value:Q', title='Projected Portfolio Value ($)'),
-                                                alt.Y('Density:Q', title='Probability Density'),
-                                                alt.Color('Scenario:N', scale=alt.Scale(domain=['Unhedged', 'Hedged'], range=['#ff4b4b', '#00c853']))
-                                            ).properties(
-                                                width='container',
-                                                height=300,
-                                                title="Risk Distribution: Unhedged (Red) vs Hedged (Green)"
+                                            if st.button("🚀 Run Efficient Frontier Simulation", key="run_frontier"):
+                                                with st.spinner("Initializing Math Engine & Simulating 5,000 Portfolios..."):
+                                                    # 1. Get unique assets to optimize
+                                                    unique_hedges = results_df['Best Hedge'].unique().tolist()
+                                                    
+                                                    # 2. Fetch market data for these assets (Re-using external data fetcher)
+                                                    # We need price history to calculate covariance
+                                                    market_data_map = fetch_market_data_pool(unique_hedges, timeframe="1y")
+                                                    
+                                                    # 3. Construct Returns DataFrame
+                                                    price_data = {}
+                                                    for asset in unique_hedges:
+                                                        if asset in market_data_map:
+                                                            m_data = market_data_map[asset].get('data', [])
+                                                            if m_data:
+                                                                df_m = pd.DataFrame(m_data)
+                                                                df_m['date'] = pd.to_datetime(df_m['date'])
+                                                                df_m = df_m.set_index('date').sort_index()
+                                                                # Daily/Weekly freq
+                                                                price_data[asset] = df_m['price_index']
+                                                    
+                                                    if price_data:
+                                                        prices_df = pd.DataFrame(price_data).fillna(method='ffill').fillna(method='bfill')
+                                                        returns_df = prices_df.pct_change().dropna()
+                                                        
+                                                        if not returns_df.empty:
+                                                            # 4. Run Optimizer
+                                                            optimizer = PortfolioOptimizer(returns_df)
+                                                            opt_results = optimizer.simulate_frontier(n_portfolios=5000)
+                                                            
+                                                            # 5. Display Efficient Frontier Chart
+                                                            frontier_df = opt_results.get('frontier_data')
+                                                            max_sharpe = opt_results.get('max_sharpe')
+                                                            
+                                                            if frontier_df is not None:
+                                                                # Base Chart (Scatter)
+                                                                base = alt.Chart(frontier_df).mark_circle(size=60).encode(
+                                                                    x=alt.X('Volatility', title='Risk (Volatility)'),
+                                                                    y=alt.Y('Return', title='Expected Return'),
+                                                                    color=alt.Color('Sharpe', scale=alt.Scale(scheme='viridis')),
+                                                                    tooltip=['Return', 'Volatility', 'Sharpe']
+                                                                ).properties(
+                                                                    title='Efficient Frontier (5,000 Scenarios)',
+                                                                    height=400
+                                                                )
+                                                                
+                                                                # Optimal Point
+                                                                opt_pt = pd.DataFrame([max_sharpe])
+                                                                pt_chart = alt.Chart(opt_pt).mark_point(
+                                                                    shape='diamond', size=200, color='red', fill='red'
+                                                                ).encode(
+                                                                    x='Volatility',
+                                                                    y='Return',
+                                                                    tooltip=alt.Tooltip('Sharpe', title='Max Sharpe')
+                                                                )
+                                                                
+                                                                st.altair_chart(base + pt_chart, use_container_width=True)
+                                                                
+                                                                # 6. Trade Balance (Rebalancing)
+                                                                st.markdown("#### ⚖️ OPTIMIZED REBALANCING")
+                                                                st.caption("Adjust your current plan to match the Max Sharpe portfolio weights.")
+                                                                
+                                                                # Current allocations from the "Ideal Portfolio"
+                                                                current_amts = dict(zip(portfolio_agg['Best Hedge'], portfolio_agg['Short Amount'].replace(r'[\$,]', '', regex=True).astype(float)))
+                                                                total_cap = sum(current_amts.values())
+                                                                
+                                                                # Target allocations
+                                                                target_wts = max_sharpe['Weights']
+                                                                
+                                                                # Calculate Trades
+                                                                rebalance_df = optimizer.calculate_rebalancing_trades(
+                                                                    current_holdings=current_amts,
+                                                                    target_allocation=target_wts,
+                                                                    total_capital=total_cap
+                                                                )
+                                                                
+                                                                if not rebalance_df.empty:
+                                                                    rebalance_df['Trade Value'] = rebalance_df['Trade Value'].apply(lambda x: f"${x:,.2f}")
+                                                                    rebalance_df['Current Value'] = rebalance_df['Current Value'].apply(lambda x: f"${x:,.2f}")
+                                                                    rebalance_df['Target Value'] = rebalance_df['Target Value'].apply(lambda x: f"${x:,.2f}")
+                                                                    rebalance_df['Pct Portfolio'] = rebalance_df['Pct Portfolio'].apply(lambda x: f"{x:.1%}")
+                                                                    
+                                                                    st.dataframe(rebalance_df, use_container_width=True, hide_index=True)
+                                                                else:
+                                                                    st.success("Your portfolio is already perfectly optimized!")
+
+                                            st.markdown("---")
+                                            st.markdown("### 💎 TOP OPPORTUNITIES")
+                                            st.dataframe(
+                                                display_df.style.format({"Sharpe Gain": "{:+.2f}"}).background_gradient(subset=["Sharpe Gain"], cmap="Greens"),
+                                                use_container_width=True,
+                                                hide_index=True
+                                            )
+                                        
+                                        else:  # market_scan
+                                            # Metric Summary
+                                            if not results_df.empty:
+                                                top_gain = results_df.iloc[0]
+                                                total_hedge_opp = results_df['Short Amount'].sum()
+                                                
+                                                m1, m2, m3, m4 = st.columns(4)
+                                                m1.metric("Highest Opportunity", top_gain['Item'], f"+{top_gain['Sharpe Gain']:.2f} Sharpe")
+                                                m2.metric("Most Common Hedge", results_df['Best Hedge'].mode()[0] if len(results_df) > 0 else "N/A")
+                                                m3.metric("Total Hedge Value", f"${total_hedge_opp:,.0f}")
+                                                m4.metric("Avg Vol Reduction", f"-{results_df['Vol Reduction'].mean():.1f}%")
+                                            
+                                            st.markdown("### OPPORTUNITY LIST")
+                                            st.dataframe(
+                                                display_df.style.format({"Sharpe Gain": "{:+.2f}"}).background_gradient(subset=["Sharpe Gain"], cmap="Greens"),
+                                                use_container_width=True,
+                                                hide_index=True
+                                            )
+                                        
+                                        # Monte Carlo Simulation (all modes)
+                                        st.markdown("---")
+                                        st.markdown("### 🎲 HEDGE IMPACT SIMULATION (6 MONTHS)")
+                                        
+                                        total_portfolio_value = results_df['Inventory Value'].sum()
+                                        if total_portfolio_value > 0:
+                                            unhedged_vol_assumed = 0.25
+                                            total_weight = results_df['Inventory Value'].sum()
+                                            
+                                            if total_weight > 0:
+                                                weighted_vol_red = (results_df['Vol Reduction'] * results_df['Inventory Value']).sum() / total_weight
+                                                weighted_sharpe_opt = (results_df['Optimal Sharpe'] * results_df['Inventory Value']).sum() / total_weight
+                                            else:
+                                                weighted_vol_red = results_df['Vol Reduction'].mean()
+                                                weighted_sharpe_opt = results_df['Optimal Sharpe'].mean()
+                                            
+                                            hedged_vol_sim = unhedged_vol_assumed * (1 - (weighted_vol_red / 100.0))
+                                            hedged_drift_assumed = min(weighted_sharpe_opt * hedged_vol_sim, 0.50)
+                                            unhedged_drift_assumed = 0.05
+                                            
+                                            st.caption(f"Simulating 1,000 scenarios. Baseline Vol: {unhedged_vol_assumed*100:.1f}% → Hedged Vol: {hedged_vol_sim*100:.1f}%")
+                                            
+                                            sim_results = simulate_portfolio_variance(
+                                                current_value=total_portfolio_value,
+                                                unhedged_vol=unhedged_vol_assumed,
+                                                hedged_vol=hedged_vol_sim,
+                                                mu=hedged_drift_assumed,
+                                                months=6
                                             )
                                             
-                                            # --- CHART 2: TIME SERIES GROWTH (NEW) ---
-                                            ts_df = sim_results['timeseries']
-                                            
-                                            ts_base = alt.Chart(ts_df).encode(
-                                                x=alt.X('Day:Q', title='Days into Future')
-                                            )
-                                            
-                                            # Mean Line
-                                            lines = ts_base.mark_line().encode(
-                                                y=alt.Y('Mean:Q', title='Projected Value ($)', scale=alt.Scale(zero=False)),
-                                                color=alt.Color('Scenario:N', scale=alt.Scale(domain=['Unhedged', 'Hedged'], range=['#ff4b4b', '#00c853']))
-                                            )
-                                            
-                                            # Confidence Interval
-                                            area = ts_base.mark_area(opacity=0.3).encode(
-                                                y='Lower:Q',
-                                                y2='Upper:Q',
-                                                color=alt.Color('Scenario:N'),
-                                                tooltip=['Day', 'Scenario', alt.Tooltip('Mean', format='$,.0f'), alt.Tooltip('Lower', format='$,.0f'), alt.Tooltip('Upper', format='$,.0f')]
-                                            )
-                                            
-                                            ts_chart = (area + lines).properties(
-                                                width='container',
-                                                height=300,
-                                                title="Projected Growth (Mean + 90% Confidence Interval)"
-                                            ).interactive()
-                                            
-                                            # Render Side-by-Side
-                                            c1, c2 = st.columns(2)
-                                            with c1:
-                                                st.altair_chart(d_chart, use_container_width=True)
-                                            with c2:
-                                                st.altair_chart(ts_chart, use_container_width=True)
-                                            
-                                            # Metrics Replacement
-                                            st.markdown("### 📈 RISK & RETURN ANALYSIS")
-                                            
-                                            final_day = ts_df['Day'].max()
-                                            final_stats = ts_df[ts_df['Day'] == final_day]
-                                            
-                                            uh_row = final_stats[final_stats['Scenario'] == 'Unhedged'].iloc[0]
-                                            h_row = final_stats[final_stats['Scenario'] == 'Hedged'].iloc[0]
-                                            
-                                            floor_u = uh_row['Lower']
-                                            floor_h = h_row['Lower']
-                                            floor_gain = floor_h - floor_u
-                                            
-                                            # Sharpe Calculation (Consistent with Simulation)
-                                            # Unhedged: Uses baseline drift (0.05)
-                                            sharpe_u = unhedged_drift_assumed / unhedged_vol_assumed if unhedged_vol_assumed > 0 else 0
-                                            
-                                            # Hedged: Uses the optimized drift we derived from the item-level opportunities
-                                            sharpe_h = hedged_drift_assumed / hedged_vol_sim if hedged_vol_sim > 0 else 0
-                                            
-                                            sharpe_delta = sharpe_h - sharpe_u
-                                            
-                                            m1, m2, m3, m4 = st.columns(4)
-                                            m1.metric("Unhedged Sharpe", f"{sharpe_u:.2f}", help="Return/Risk Ratio (Baseline)")
-                                            m2.metric("Hedged Sharpe", f"{sharpe_h:.2f}", delta=f"+{sharpe_delta:.2f}", help="Return/Risk Ratio (Optimized)")
-                                            m3.metric("Volatility Reduction", f"{weighted_vol_red:.1f}%", delta="Smoother Ride")
-                                            m4.metric("Risk Floor Gain (5%)", f"+${floor_gain:,.0f}", delta="Downside Protection")
-                                        else:
-                                           st.warning("Simulation returned no data.")
-
-                                else:
-                                    st.info("No valid hedging data found for any of the top 50 items.")
-                            else:
-                                st.info("Click 'RUN HEDGE SCAN' to analyze top 50 raw materials for Sharpe Ratio improvements.")
+                                            if sim_results:
+                                                dist_df = sim_results['distribution']
+                                                d_chart = alt.Chart(dist_df).transform_density(
+                                                    'Value', groupby=['Scenario'], as_=['Value', 'Density']
+                                                ).mark_area(opacity=0.5).encode(
+                                                    alt.X('Value:Q', title='Projected Portfolio Value ($)'),
+                                                    alt.Y('Density:Q', title='Probability Density'),
+                                                    alt.Color('Scenario:N', scale=alt.Scale(domain=['Unhedged', 'Hedged'], range=['#ff4b4b', '#00c853']))
+                                                ).properties(width='container', height=300, title="Risk Distribution: Unhedged vs Hedged")
+                                                
+                                                ts_df = sim_results['timeseries']
+                                                ts_base = alt.Chart(ts_df).encode(x=alt.X('Day:Q', title='Days'))
+                                                lines = ts_base.mark_line().encode(
+                                                    y=alt.Y('Mean:Q', title='Value ($)', scale=alt.Scale(zero=False)),
+                                                    color=alt.Color('Scenario:N', scale=alt.Scale(domain=['Unhedged', 'Hedged'], range=['#ff4b4b', '#00c853']))
+                                                )
+                                                area = ts_base.mark_area(opacity=0.3).encode(y='Lower:Q', y2='Upper:Q', color='Scenario:N')
+                                                ts_chart = (area + lines).properties(width='container', height=300, title="Projected Growth (90% CI)").interactive()
+                                                
+                                                c1, c2 = st.columns(2)
+                                                with c1:
+                                                    st.altair_chart(d_chart, use_container_width=True)
+                                                with c2:
+                                                    st.altair_chart(ts_chart, use_container_width=True)
+                                                
+                                                st.markdown("### 📈 RISK & RETURN ANALYSIS")
+                                                final_day = ts_df['Day'].max()
+                                                final_stats = ts_df[ts_df['Day'] == final_day]
+                                                
+                                                uh_row = final_stats[final_stats['Scenario'] == 'Unhedged'].iloc[0]
+                                                h_row = final_stats[final_stats['Scenario'] == 'Hedged'].iloc[0]
+                                                floor_gain = h_row['Lower'] - uh_row['Lower']
+                                                
+                                                sharpe_u = unhedged_drift_assumed / unhedged_vol_assumed if unhedged_vol_assumed > 0 else 0
+                                                sharpe_h = hedged_drift_assumed / hedged_vol_sim if hedged_vol_sim > 0 else 0
+                                                sharpe_delta = sharpe_h - sharpe_u
+                                                
+                                                m1, m2, m3, m4 = st.columns(4)
+                                                m1.metric("Unhedged Sharpe", f"{sharpe_u:.2f}")
+                                                m2.metric("Hedged Sharpe", f"{sharpe_h:.2f}", delta=f"+{sharpe_delta:.2f}")
+                                                m3.metric("Vol Reduction", f"{weighted_vol_red:.1f}%")
+                                                m4.metric("Risk Floor Gain", f"+${floor_gain:,.0f}")
+                    
                     
                     elif view_mode == "FIFO Tracker":
                         # Delegate to the FIFO Tracker module
@@ -1906,18 +2219,22 @@ try:
         elif st.session_state.current_page == "product_insights" and st.session_state.selected_product:
             product_item = st.session_state.selected_product
             
+            # Fetch Data
+            details = get_product_details(cursor, product_item)
+            item_desc = details.get('item_desc', '') if details else ''
+
             # Header with back button
             header_col1, header_col2 = st.columns([8, 1])
             with header_col1:
                 st.markdown(f"# 🎯 MARKET_INTELLIGENCE: `{product_item}`")
+                if item_desc:
+                    st.markdown(f"### {item_desc}") 
             with header_col2:
                 if st.button("← BACK", key="back_to_overview"):
                     st.session_state.current_page = "market_overview"
                     st.session_state.selected_product = None
                     st.rerun()
 
-            # Fetch Data
-            details = get_product_details(cursor, product_item)
             if not details:
                 st.error("PRODUCT DATA NOT FOUND")
             else:
@@ -2082,6 +2399,23 @@ try:
                 with kpi6:
                     st.markdown("### SUPPLY POSITION")
                     st.markdown(f"**On Order:** {on_order:,.0f}")
+                    
+                    po_vendor_infos = inventory.get('OnOrderVendorInfos', [])
+                    # Fallback to plain list if new structure missing (backward compat)
+                    if not po_vendor_infos and 'OnOrderVendors' in inventory:
+                        po_vendor_infos = [{'name': v, 'phone': None} for v in inventory.get('OnOrderVendors', [])]
+                        
+                    if on_order > 0 and po_vendor_infos:
+                        for v_info in po_vendor_infos:
+                            v_name = v_info.get('name', 'Unknown')
+                            v_phone = v_info.get('phone')
+                            
+                            st.markdown(f"**Vendor:** {v_name}")
+                            if v_phone:
+                                st.markdown(f"**Phone:** {v_phone}")
+                            else:
+                                st.markdown(f"**Phone:** No phone number")
+                        
                     st.markdown(f"**Inventory Value:** ${inv_value:,.2f}")
 
                 with kpi7:
@@ -2219,7 +2553,8 @@ try:
                                 # Only update if it's a valid complete range (Streamlit returns tuple of 1 during selection)
                                 if isinstance(new_range, (tuple, list)) and len(new_range) == 2:
                                     st.session_state[range_key] = new_range
-                                    st.rerun() # Rerun to apply the new range to the charts immediately
+
+
                             
                             # Final values for filtering
                             if isinstance(new_range, (tuple, list)) and len(new_range) == 2:
@@ -2356,7 +2691,11 @@ try:
                                         total_spend = (chart_data['AvgCost'] * chart_data['Quantity']).sum() if 'Quantity' in chart_data.columns else 0
                                         transaction_count = chart_data['TransactionCount'].sum()
 
-                                    w_avg_cost = (total_spend / total_qty) if total_qty > 0 else 0
+                                    if total_qty > 0:
+                                        w_avg_cost = total_spend / total_qty
+                                    else:
+                                        # Fallback to simple average if no quantity (e.g. only price records or filtered out)
+                                        w_avg_cost = chart_data['AvgCost'].mean() if not chart_data.empty else 0
                                     
                                     st.metric("Total Spend", f"${total_spend:,.2f}")
                                     st.metric("Total Qty", f"{total_qty:,.0f}")
@@ -2428,7 +2767,8 @@ try:
                                         if isinstance(new_u_range, (tuple, list)) and len(new_u_range) == 2:
                                             st.session_state[usage_state_key] = new_u_range
                                             _set_usage_override(usage_state_key, usage_override_key, True) # User touched it -> Lock it
-                                            st.rerun()
+
+
                                     
                                     u_start, u_end = st.session_state[usage_state_key]
                                     start_dt = pd.to_datetime(u_start)
@@ -2485,19 +2825,41 @@ try:
                                         )
                                         monthly_udf = monthly_udf.dropna(subset=["UsageDate"]).sort_values("UsageDate")
 
-                                        default_view = st.session_state.get(usage_view_key, "Monthly")
                                         header_col, toggle_col = st.columns([5, 2])
                                         with header_col:
                                             st.markdown("#### Usage History")
                                         with toggle_col:
-                                            usage_view_mode = st.radio(
+                                            # Robust Checkbox Logic: Decouple persistence from widget existence
+                                            # This fixes issues where the widget resets if it temporarily disappears (e.g. valid checks)
+                                            # or if Streamlit reruns cause state desync.
+                                            view_mode_persistent_key = f"{usage_view_key}_persistent"
+                                            
+                                            # 1. Ensure persistent store exists
+                                            if view_mode_persistent_key not in st.session_state:
+                                                st.session_state[view_mode_persistent_key] = "Monthly"
+                                            
+                                            # 2. Sync Widget to Persistent State (if widget not yet initialized for this run)
+                                            # This acts as the "default" but stronger - we force the widget to match our memory
+                                            if usage_view_key not in st.session_state:
+                                                st.session_state[usage_view_key] = st.session_state[view_mode_persistent_key]
+                                            
+                                            # 3. Render Widget
+                                            st.radio(
                                                 "Usage view",
                                                 ["Monthly", "All"],
                                                 horizontal=True,
-                                                index=0 if default_view == "Monthly" else 1,
                                                 key=usage_view_key,
                                                 label_visibility="collapsed",
-                                        )
+                                            )
+                                            
+                                            # 4. Sync Persistent State to Widget (Capture User Change)
+                                            # If user changed it just now, widget state is new. Update persistent.
+                                            if st.session_state[usage_view_key] != st.session_state[view_mode_persistent_key]:
+                                                st.session_state[view_mode_persistent_key] = st.session_state[usage_view_key]
+
+
+                                                
+                                            usage_view_mode = st.session_state[view_mode_persistent_key]
 
                                         if usage_view_mode == "Monthly":
                                             range_notice = None
@@ -2676,6 +3038,29 @@ try:
                                     for i, vendor in enumerate(vendors):
                                         with tabs[i+1]:
                                             vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == vendor]
+                                            
+                                            # Display Vendor Phone if available
+                                            if not vendor_df.empty and 'VendorPhone' in vendor_df.columns:
+                                                phones = [p for p in vendor_df['VendorPhone'].unique() if p and str(p).strip()]
+                                                phone_raw = str(phones[0]).strip() if phones else ""
+                                                
+                                                if phone_raw:
+                                                    # Format Phone: 80023860750000 -> (800) 238-6075 Ext. 0000
+                                                    # GP often stores as 14 chars (Area Code 3 + Prefix 3 + Number 4 + Ext 4)
+                                                    formatted_phone = phone_raw
+                                                    digits = "".join(filter(str.isdigit, phone_raw))
+                                                    
+                                                    if len(digits) == 14:
+                                                        formatted_phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:10]} Ext. {digits[10:]}"
+                                                    elif len(digits) == 10:
+                                                        formatted_phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+                                                    elif len(digits) == 7:
+                                                        formatted_phone = f"{digits[:3]}-{digits[3:]}"
+                                                        
+                                                    st.text_input("Phone 1", value=formatted_phone, disabled=True, key=f"phone_{i}_{str(vendor)[:10]}")
+                                                else:
+                                                    st.text_input("Phone 1", value="No phone number", disabled=True, key=f"phone_{i}_{str(vendor)[:10]}")
+
                                             render_price_chart(
                                             vendor_df,
                                             safe_clamp,

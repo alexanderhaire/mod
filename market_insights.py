@@ -77,6 +77,9 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 CAST(MAX(h.RECEIPTDATE) AS DATE) as TransactionDate,
                 MAX(h.VENDORID) as VENDORID,
                 MAX(h.VENDNAME) as VENDNAME,
+                MAX(vm.PHNUMBR1) as Phone1,
+                MAX(vm.PHNUMBR2) as Phone2,
+                MAX(vm.PHONE3) as Phone3,
                 MAX(l.UOFM) as UOFM,
                 MAX(l.UMQTYINB) as UMQTYINB,
                 AVG(l.UNITCOST) as UNITCOST,
@@ -86,6 +89,7 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 (SELECT TOP 1 UNITCOST FROM IV10200 iv WHERE iv.RCPTNMBR = l.POPRCTNM AND iv.ITEMNMBR = l.ITEMNMBR) as InventoryUnitCost
             FROM POP30310 l
             JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+            LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
             WHERE l.ITEMNMBR = ?
                 AND h.RECEIPTDATE >= ?
                 AND h.RECEIPTDATE <= ?
@@ -116,6 +120,18 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                     
                     ext_cost = float(r.get('EXTDCOST') or 0)
                     
+                    # LOGIC FIX: Landed Cost (Vendor Base) should naturally be <= Delivered Cost (Fully Loaded).
+                    # If Landed > Delivered, it implies the Receipt Cost was estimated high and later adjusted down (e.g. lower invoice).
+                    # In these cases, the "Landed Cost" shown should reflect the final reality (Delivered Cost), not the initial high estimate.
+                    # This also covers the UOM anomaly case (where Landed is 2x+ Delivered).
+                    is_anomaly = False
+                    if landed_cost_val > delivered_cost_val:
+                        landed_cost_val = delivered_cost_val
+                        # We don't mark as 'is_anomaly' for small variances, only massive ones if we wanted specific flagging,
+                        # but for the chart, correctness is priority.
+                        if delivered_cost_val > 0 and landed_cost_val > (delivered_cost_val * 1.5):
+                            is_anomaly = True
+                    
                     # Normalize cost to Base Unit (e.g., Cost Per Pound)
                     if qty_in_base > 0:
                         norm_landed = landed_cost_val / qty_in_base
@@ -125,10 +141,22 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                         norm_delivered = delivered_cost_val
                         
                     # Calculate Quantity based on Cost
+                    # If it was an anomaly, we recalculate quantity using the CORRECTED cost to find the "Implied Quantity"
+                    # E.g. If Ext Cost $757 and Rate $6, implies ~120 units, not 55 units.
                     qty_purchased = 0
                     if landed_cost_val > 0:
                          qty_purchased = (ext_cost / landed_cost_val) * qty_in_base
                     
+                    # Resolve best phone number (Phone 1, 2, or 3) - Skip empty or all-zeros
+                    raw_phones = [str(r.get('Phone1', '')).strip(), str(r.get('Phone2', '')).strip(), str(r.get('Phone3', '')).strip()]
+                    final_phone = ""
+                    for p in raw_phones:
+                        # Check if has non-zero digits
+                        d = "".join(filter(str.isdigit, p))
+                        if d and not all(c == '0' for c in d):
+                            final_phone = p
+                            break
+
                     history.append({
                         'TransactionDate': r['TransactionDate'],
                         'AvgCost': norm_delivered, # Use Delivered (High) as main line
@@ -136,11 +164,13 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                         'LandedCost': norm_landed,
                         'VendorID': str(r.get('VENDORID', '')).strip(),
                         'VendorName': str(r.get('VENDNAME', '')).strip(),
+                        'VendorPhone': final_phone,
                         'UofM': str(r.get('UOFM', '')).strip(),
                         'OriginalCost': landed_cost_val,
                         'ExtendedCost': ext_cost,
                         'TransactionCount': 1,
-                        'Quantity': qty_purchased
+                        'Quantity': qty_purchased,
+                        'IsAnomalyFix': is_anomaly
                     })
             else:
                 # Fallback: If no purchase history found (e.g. manufactured RM, or old stock), 
@@ -156,7 +186,7 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 CAST(h.DOCDATE AS DATE) as TransactionDate,
                 AVG(t.UNITCOST) as AvgCost,
                 COUNT(*) as TransactionCount,
-                SUM(t.TRXQTY) as Quantity
+                SUM(CASE WHEN t.TRXQTY > 0 THEN t.TRXQTY ELSE 0 END) as Quantity
             FROM IV30300 t
             JOIN IV30200 h ON t.DOCNUMBR = h.DOCNUMBR AND t.DOCTYPE = h.IVDOCTYP
             WHERE t.ITEMNMBR = ?
@@ -299,7 +329,7 @@ def fetch_product_usage_history(
             select_clause = """
             YEAR(h.DOCDATE) as Year,
             MONTH(h.DOCDATE) as Month,
-            SUM(CASE WHEN t.TRXQTY < 0 THEN -t.TRXQTY ELSE 0 END) as UsageQty,
+            SUM(CASE WHEN t.TRXQTY < 0 AND h.IVDOCTYP = 1 THEN -t.TRXQTY ELSE 0 END) as UsageQty,
             SUM(CASE WHEN t.TRXQTY > 0 THEN t.TRXQTY ELSE 0 END) as ReceiptQty,
             COUNT(*) as TransactionCount
             """
@@ -311,7 +341,7 @@ def fetch_product_usage_history(
             MONTH(h.DOCDATE) as Month,
             DAY(h.DOCDATE) as Day,
             h.DOCDATE as UsageDate,
-            SUM(CASE WHEN t.TRXQTY < 0 THEN -t.TRXQTY ELSE 0 END) as UsageQty,
+            SUM(CASE WHEN t.TRXQTY < 0 AND h.IVDOCTYP = 1 THEN -t.TRXQTY ELSE 0 END) as UsageQty,
             SUM(CASE WHEN t.TRXQTY > 0 THEN t.TRXQTY ELSE 0 END) as ReceiptQty,
             COUNT(*) as TransactionCount
             """
@@ -403,20 +433,59 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
         # Exclude 4=Received, 5=Closed, 6=Canceled.
         try:
             po_query = """
-            SELECT COALESCE(SUM(l.QTYORDER - l.QTYCANCE), 0) as POOnOrder
+            SELECT 
+                COALESCE(SUM(l.QTYORDER - l.QTYCANCE), 0) as POOnOrder,
+                MAX(h.VENDNAME) as LastVendor,
+                MAX(vm.PHNUMBR1) as Phone1,
+                MAX(vm.PHNUMBR2) as Phone2,
+                MAX(vm.PHONE3) as Phone3
             FROM POP10110 l
             JOIN POP10100 h ON l.PONUMBER = h.PONUMBER
+            LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
             WHERE l.ITEMNMBR = ?
               AND h.POSTATUS IN (1, 2, 3)
               AND l.POLNESTA IN (1, 2, 3)
               AND l.LOCNCODE = ?
+            GROUP BY h.VENDNAME
             """
             cursor.execute(po_query, item_number, PRIMARY_LOCATION)
-            po_row = cursor.fetchone()
-            po_on_order = float(po_row[0]) if po_row and po_row[0] else 0
+            po_rows = cursor.fetchall()
+            
+            po_on_order = 0.0
+            vendor_infos = []
+            
+            if po_rows:
+                for r in po_rows:
+                    qty = float(r[0] or 0)
+                    vend_name = str(r[1] or '').strip()
+                    
+                    if qty > 0:
+                        po_on_order += qty
+                        if vend_name:
+                             # Resolve best phone number
+                            raw_phones = [str(r[2] or '').strip(), str(r[3] or '').strip(), str(r[4] or '').strip()]
+                            final_phone = None
+                            for p in raw_phones:
+                                # Check if has non-zero digits
+                                d = "".join(filter(str.isdigit, p))
+                                if d and not all(c == '0' for c in d):
+                                    final_phone = p
+                                    break
+                            
+                            vendor_infos.append({
+                                'name': vend_name,
+                                'phone': final_phone
+                            })
+            
+            # Deduplicate by name
+            unique_vendors = {}
+            for v in vendor_infos:
+                unique_vendors[v['name']] = v
             
             # Use the calculated PO On Order
             inventory['OnOrder'] = po_on_order
+            inventory['OnOrderVendorInfos'] = list(unique_vendors.values())
+            inventory['OnOrderVendors'] = sorted(list(unique_vendors.keys())) # Keep backward compatibility just in case
             
         except Exception as e:
             # Fallback to IV00102 OnOrder if PO query fails, but likely 0 if MAIN filtered
@@ -1301,6 +1370,117 @@ def get_volatility_score(cursor: pyodbc.Cursor, item_number: str) -> dict[str, A
         return {'volatility_score': 0, 'volatility_label': 'Error', 'color': '#839496'}
 
 
+def validate_price_history_quality(
+    history: list[dict[str, Any]], 
+    min_records: int = 6,
+    expected_months: int = 12
+) -> dict[str, Any]:
+    """
+    Validate price history quality and return confidence metrics.
+    Used by Pure Allocator to filter out items with unreliable price data.
+    
+    Args:
+        history: List of price history records from fetch_product_price_history
+        min_records: Minimum number of records required for "reliable" status
+        expected_months: Expected months of coverage for date spread calculation
+        
+    Returns:
+        {
+            'is_reliable': bool,
+            'confidence': float (0-1),
+            'record_count': int,
+            'date_coverage_pct': float,
+            'price_stability': float (0-1, lower = more stable),
+            'warnings': list[str]
+        }
+    """
+    result = {
+        'is_reliable': False,
+        'confidence': 0.0,
+        'record_count': 0,
+        'date_coverage_pct': 0.0,
+        'price_stability': 1.0,
+        'warnings': []
+    }
+    
+    if not history:
+        result['warnings'].append("No price history available")
+        return result
+    
+    result['record_count'] = len(history)
+    
+    # Check minimum record count
+    if len(history) < min_records:
+        result['warnings'].append(f"Only {len(history)} records (need {min_records}+)")
+    
+    # Extract prices and dates
+    prices = []
+    dates = []
+    
+    for record in history:
+        # Try different price field names
+        price = record.get('LandedCost') or record.get('Cost') or record.get('price') or record.get('UNITCOST')
+        if price and float(price) > 0:
+            prices.append(float(price))
+        
+        date = record.get('TransactionDate') or record.get('date') or record.get('Date')
+        if date:
+            if isinstance(date, str):
+                try:
+                    date = datetime.datetime.strptime(date[:10], '%Y-%m-%d').date()
+                except:
+                    continue
+            elif isinstance(date, datetime.datetime):
+                date = date.date()
+            dates.append(date)
+    
+    if not prices:
+        result['warnings'].append("No valid prices found in history")
+        return result
+    
+    # Calculate date coverage
+    if len(dates) >= 2:
+        date_span_days = (max(dates) - min(dates)).days
+        expected_days = expected_months * 30
+        result['date_coverage_pct'] = min(100.0, (date_span_days / expected_days) * 100)
+        
+        if result['date_coverage_pct'] < 50:
+            result['warnings'].append(f"Limited date coverage ({result['date_coverage_pct']:.0f}%)")
+    
+    # Calculate price stability (coefficient of variation)
+    mean_price = sum(prices) / len(prices)
+    if mean_price > 0 and len(prices) > 1:
+        std_dev = (sum((p - mean_price) ** 2 for p in prices) / len(prices)) ** 0.5
+        cv = std_dev / mean_price
+        result['price_stability'] = min(1.0, cv)  # Capped at 1.0
+        
+        # Check for extreme outliers (price spikes > 3x median)
+        sorted_prices = sorted(prices)
+        median_price = sorted_prices[len(sorted_prices) // 2]
+        outliers = [p for p in prices if p > median_price * 3 or p < median_price / 3]
+        
+        if outliers:
+            result['warnings'].append(f"{len(outliers)} price outlier(s) detected")
+    
+    # Calculate overall confidence score
+    record_score = min(1.0, len(history) / 12)  # 12+ records = full score
+    coverage_score = result['date_coverage_pct'] / 100
+    stability_score = 1.0 - (result['price_stability'] * 0.5)  # Lower CV = higher score
+    outlier_penalty = 0.1 * len(result['warnings'])
+    
+    confidence = (record_score * 0.4 + coverage_score * 0.3 + stability_score * 0.3) - outlier_penalty
+    result['confidence'] = max(0.0, min(1.0, confidence))
+    
+    # Determine if reliable (confidence > 0.5 and minimum records met)
+    result['is_reliable'] = (
+        result['confidence'] >= 0.5 
+        and len(history) >= min_records
+        and result['date_coverage_pct'] >= 30
+    )
+    
+    return result
+
+
 def get_seasonal_pattern(cursor: pyodbc.Cursor, item_number: str) -> dict[str, Any]:
     """
     Detect seasonal usage patterns by analyzing month-over-month variations.
@@ -1383,10 +1563,13 @@ def get_priority_raw_materials(
         WITH RecentUsage AS (
             SELECT 
                 t.ITEMNMBR,
-                SUM(ABS(t.TRXQTY)) as UsageQty180
+                SUM(CASE WHEN t.TRXQTY < 0 AND h.IVDOCTYP = 1 THEN -t.TRXQTY ELSE 0 END) as UsageQty180
             FROM IV30300 t
             JOIN IV30200 h ON t.DOCNUMBR = h.DOCNUMBR AND t.DOCTYPE = h.IVDOCTYP
             WHERE h.DOCDATE >= DATEADD(day, -180, GETDATE())
+              -- Only include relevant transaction types (Adjustments, Variances, Sales, Transfers)
+              -- Exclude Receipts/Returns usually handled in POP tables, but checking sign handles it mostly.
+              -- Ideally filter IVDOCTYP IN (1, 2, 3, 6) but sign check is robust for "Consumption"
             GROUP BY t.ITEMNMBR
         ),
         RecentPurchases AS (
