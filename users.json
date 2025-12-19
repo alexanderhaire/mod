@@ -12,5 +12,12 @@
     "is_vendor": true,
     "is_broker": false,
     "linked_id": "1STBAP"
+  },
+  "tester": {
+    "password": "a109662dc177d0ecee43db676c0166d2$5d0bcc86714918340f35608ed6c66dff558ffc8982ff9e74d62bc78a36a6313a",
+    "created_at": 1766170687,
+    "is_vendor": true,
+    "is_broker": false,
+    "linked_id": null
   }
 }

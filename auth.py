@@ -181,3 +181,24 @@ def is_admin(username: str) -> bool:
         if username.lower() in admin_set:
             return True
     return False
+
+
+def has_completed_tour(username: str) -> bool:
+    """Check if the user has completed the onboarding tour."""
+    username = (username or "").strip()
+    if not username:
+        return False
+    users = _load_users()
+    record = users.get(username) or {}
+    return record.get("tour_completed", False)
+
+
+def set_tour_completed(username: str) -> None:
+    """Mark the onboarding tour as completed for the user."""
+    username = (username or "").strip()
+    if not username:
+        return
+    users = _load_users()
+    if username in users:
+        users[username]["tour_completed"] = True
+        _save_users(users)

@@ -9,7 +9,7 @@ portfolio optimization (Monte Carlo Efficient Frontier) using pure Numpy.
 import numpy as np
 import pandas as pd
 import logging
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Callable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class PortfolioOptimizer:
         self.mean_returns = returns_df.mean() * 12 # Annualized
         self.cov_matrix = returns_df.cov() * 12    # Annualized
         
-    def simulate_frontier(self, n_portfolios: int = 5000) -> Dict[str, Any]:
+    def simulate_frontier(self, n_portfolios: int = 5000, progress_callback: Callable[[float], None] = None) -> Dict[str, Any]:
         """
         Simulate random portfolios to generate the Efficient Frontier.
         """
@@ -127,6 +127,10 @@ class PortfolioOptimizer:
         # Vectorized simulation might be tricky with constraints, doing loop for clarity/safety
         # But we can speed it up:
         for i in range(n_portfolios):
+            # Report progress every 100 iterations
+            if progress_callback and i % 100 == 0:
+                progress_callback(i / n_portfolios)
+
             # Generate random weights
             weights = np.random.random(self.n_assets)
             weights /= np.sum(weights)
@@ -144,6 +148,9 @@ class PortfolioOptimizer:
             results[0,i] = p_ret
             results[1,i] = p_vol
             results[2,i] = p_sharpe
+        
+        if progress_callback:
+            progress_callback(1.0)
             
         # Identify Key Portfolios
         max_sharpe_idx = np.argmax(results[2])
@@ -209,7 +216,7 @@ class PortfolioOptimizer:
             
         return pd.DataFrame(trades).sort_values("Trade Value", ascending=False)
 
-    def optimize_max_sharpe_ratio(self) -> Dict[str, Any]:
+    def optimize_max_sharpe_ratio(self, progress_callback: Callable[[float], None] = None) -> Dict[str, Any]:
         """
         Calculate the exact Maximum Sharpe Ratio portfolio using SLSRP/scipy.optimize.
         Constraints: Weights sum to 1, 0 <= w <= 1 (Long Only).
@@ -218,7 +225,7 @@ class PortfolioOptimizer:
             from scipy.optimize import minimize
         except ImportError:
             LOGGER.warning("Scipy not found. Falling back to Monte Carlo simulation.")
-            return self.simulate_frontier(n_portfolios=10000).get("max_sharpe", {})
+            return self.simulate_frontier(n_portfolios=10000, progress_callback=progress_callback).get("max_sharpe", {})
 
         n = self.n_assets
         args = (self.mean_returns, self.cov_matrix, self.rf)

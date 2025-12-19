@@ -59,6 +59,7 @@ from ml_engine import OnlineLinearRegressor, PortfolioOptimizer
 from portfolio_manager import PortfolioManager
 import fifo_tracker
 from wizard_ui import WizardFlow
+from onboarding_tour import OnboardingTour, render_tour_overlay, init_tour_for_new_user
 from external_data import (
     get_market_context,
     fetch_agricultural_market_data,
@@ -76,6 +77,8 @@ from dynamic_handler import (
 from router import handle_question
 from secrets_loader import build_connection_string
 from training_logger import record_sql_example_from_response, record_training_event
+from hotkey_utils import inject_hotkeys
+
 
 st.set_page_config(
     page_title="Chemical Dynamics",
@@ -84,7 +87,77 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+def _ensure_chat_state() -> None:
+    """Initialize multi-chat state and migrate any legacy single-chat history."""
+    if "chat_counter" not in st.session_state:
+        st.session_state.chat_counter = 1
+    if "chats" not in st.session_state:
+        st.session_state.chats = []
+    if "active_chat_id" not in st.session_state:
+        st.session_state.active_chat_id = None
+
+    legacy_messages = st.session_state.pop("messages", None)
+    legacy_context = st.session_state.pop("chat_context", None)
+
+    if not st.session_state.chats:
+        chat_id = f"chat-{st.session_state.chat_counter}"
+        st.session_state.chat_counter += 1
+        st.session_state.chats.append(
+            {
+                "id": chat_id,
+                "name": "Chat 1",
+                "messages": legacy_messages if isinstance(legacy_messages, list) else [],
+                "context": legacy_context if isinstance(legacy_context, dict) else {},
+            }
+        )
+        st.session_state.active_chat_id = chat_id
+
+    active_ids = {c["id"] for c in st.session_state.chats}
+    if st.session_state.active_chat_id not in active_ids and st.session_state.chats:
+        st.session_state.active_chat_id = st.session_state.chats[0]["id"]
+
+
+def _get_chat(chat_id: str | None) -> dict | None:
+    return next((chat for chat in st.session_state.chats if chat["id"] == chat_id), None)
+
+
+def _ensure_new_chat(name: str | None = None) -> dict:
+    """Create a new chat with a friendly default name."""
+    base_name = name.strip() if name and name.strip() else f"Chat {st.session_state.chat_counter}"
+    chat_id = f"chat-{st.session_state.chat_counter}"
+    st.session_state.chat_counter += 1
+    chat = {"id": chat_id, "name": base_name, "messages": [], "context": {}}
+    st.session_state.chats.append(chat)
+    st.session_state.active_chat_id = chat_id
+    return chat
+
+
 st.sidebar.caption("System v1.5.1 [ML Logic Active]")
+
+# Restart Tour button (shown when user is logged in)
+# Restart Tour button (shown when user is logged in)
+if st.session_state.get("user"):
+    col_nav1, col_nav2 = st.sidebar.columns(2)
+    with col_nav1:
+        if st.button("📖 Restart Tour", key="restart_tour_btn"):
+            tour = OnboardingTour()
+            tour.start()
+            st.rerun()
+    with col_nav2:
+        if st.button("✨ New Chat", key="new_chat_btn", help="Ctrl+K"):
+            _ensure_new_chat()
+            st.rerun()
+
+    if st.sidebar.button("🚪 Logout", key="logout_btn"):
+        # Clear all session state keys to log out
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
+# Inject Hotkeys (Global)
+inject_hotkeys()
+
 
 st.markdown(
     """
@@ -549,49 +622,7 @@ def _render_handler_admin_panel() -> None:
                 st.error("Unable to delete handler.")
 
 
-def _ensure_chat_state() -> None:
-    """Initialize multi-chat state and migrate any legacy single-chat history."""
-    if "chat_counter" not in st.session_state:
-        st.session_state.chat_counter = 1
-    if "chats" not in st.session_state:
-        st.session_state.chats = []
-    if "active_chat_id" not in st.session_state:
-        st.session_state.active_chat_id = None
 
-    legacy_messages = st.session_state.pop("messages", None)
-    legacy_context = st.session_state.pop("chat_context", None)
-
-    if not st.session_state.chats:
-        chat_id = f"chat-{st.session_state.chat_counter}"
-        st.session_state.chat_counter += 1
-        st.session_state.chats.append(
-            {
-                "id": chat_id,
-                "name": "Chat 1",
-                "messages": legacy_messages if isinstance(legacy_messages, list) else [],
-                "context": legacy_context if isinstance(legacy_context, dict) else {},
-            }
-        )
-        st.session_state.active_chat_id = chat_id
-
-    active_ids = {c["id"] for c in st.session_state.chats}
-    if st.session_state.active_chat_id not in active_ids and st.session_state.chats:
-        st.session_state.active_chat_id = st.session_state.chats[0]["id"]
-
-
-def _get_chat(chat_id: str | None) -> dict | None:
-    return next((chat for chat in st.session_state.chats if chat["id"] == chat_id), None)
-
-
-def _ensure_new_chat(name: str | None = None) -> dict:
-    """Create a new chat with a friendly default name."""
-    base_name = name.strip() if name and name.strip() else f"Chat {st.session_state.chat_counter}"
-    chat_id = f"chat-{st.session_state.chat_counter}"
-    st.session_state.chat_counter += 1
-    chat = {"id": chat_id, "name": base_name, "messages": [], "context": {}}
-    st.session_state.chats.append(chat)
-    st.session_state.active_chat_id = chat_id
-    return chat
 
 
 def _match_column(df: pd.DataFrame, name: str | None) -> str | None:
@@ -942,7 +973,7 @@ def _buy_calendar_cache_key(df_priority: pd.DataFrame, today: datetime.date) -> 
     return f"{today.isoformat()}-{digest}"
 
 
-def _build_buy_calendar(cursor: pyodbc.Cursor, df_priority: pd.DataFrame, today: datetime.date, progress_cb=None) -> pd.DataFrame:
+def _build_buy_calendar(cursor: pyodbc.Cursor, df_priority: pd.DataFrame, today: datetime.date, progress_cb=None, strategy: str = "mixed") -> pd.DataFrame:
     """Build the buy calendar DataFrame, optionally updating a progress callback as items are scheduled."""
     if df_priority.empty:
         return pd.DataFrame()
@@ -975,6 +1006,7 @@ def _build_buy_calendar(cursor: pyodbc.Cursor, df_priority: pd.DataFrame, today:
             available_stock=burn_metrics.get("available_stock") if burn_metrics else runway.get("available"),
             on_order=runway.get("on_order"),
             today=today,
+            strategy=strategy,
         )
 
         coverage_days = burn_metrics.get("days_of_coverage") if burn_metrics else None
@@ -1028,6 +1060,11 @@ _ensure_auth_state()
 if st.session_state.user is None:
     _render_auth_gate()
 
+# Initialize onboarding tour for authenticated users
+onboarding_tour = init_tour_for_new_user()
+
+# Render tour overlay if active (blocks interaction until dismissed)
+render_tour_overlay(onboarding_tour)
 
 _ensure_chat_state()
 
@@ -1233,10 +1270,26 @@ try:
                                     default=["CRITICAL", "WARNING", "OK"]
                                 )
                                 buy_wizard.set_data("urgency_filter", urgency_filter)
+
+                                # Strategy Selection
+                                strategy_map = {
+                                    "Mixed (Balanced)": "mixed",
+                                    "Inventory Security (Safety First)": "inventory",
+                                    "Price Opportunity (Lowest Cost)": "price"
+                                }
+                                strategy_label = st.radio(
+                                    "Optimization Strategy",
+                                    options=list(strategy_map.keys()),
+                                    index=0,
+                                    help="Inventory Security prioritizes not running out. Price Opportunity prioritizes waiting for dips.",
+                                    key="buy_cal_strategy_radio"
+                                )
+                                buy_wizard.set_data("strategy", strategy_map[strategy_label])
                                 
                                 st.markdown("---")
                                 st.markdown("**Preview:**")
                                 st.markdown(f"- Analyzing **{item_limit}** raw materials")
+                                st.markdown(f"- Strategy: **{strategy_label}**")
                                 st.markdown(f"- Showing urgency: **{', '.join(urgency_filter) if urgency_filter else 'All'}**")
                                 
                                 buy_wizard.render_navigation(next_label="Build Calendar →")
@@ -1247,6 +1300,7 @@ try:
                                 
                                 item_limit = buy_wizard.data.get("item_limit", 100)
                                 urgency_filter = buy_wizard.data.get("urgency_filter", ["CRITICAL", "WARNING", "OK"])
+                                strategy = buy_wizard.data.get("strategy", "mixed")
                                 
                                 today = datetime.date.today()
                                 df_limited = df_priority.head(item_limit)
@@ -1256,7 +1310,7 @@ try:
                                 def _update_progress(done, total, item):
                                     progress_bar.progress(done / total, text=f"Scheduling {item}...")
                                 
-                                cal_df = _build_buy_calendar(cursor, df_limited, today, progress_cb=_update_progress)
+                                cal_df = _build_buy_calendar(cursor, df_limited, today, progress_cb=_update_progress, strategy=strategy)
                                 progress_bar.empty()
                                 
                                 # Apply urgency filter
@@ -1502,20 +1556,33 @@ try:
                                     status_text.text("Fetching Global Futures Universe...")
                                     # Use the predefined universe from constants
                                     # Fetch 2 years of data for robust correlation/volatility
-                                    pool_data = fetch_market_data_pool(FUTURES_UNIVERSE, timeframe='2y')
+                                    # Progress Bar
+                                    fetch_prog = st.progress(0, text="Fetching Data...")
+                                    def update_fetch_prog(p):
+                                        fetch_prog.progress(p, text=f"Fetching Global Futures... {int(p*100)}%")
+                                    
+                                    pool_data = fetch_market_data_pool(FUTURES_UNIVERSE, timeframe='2y', _progress_callback=update_fetch_prog)
+                                    fetch_prog.empty()
                                     
                                     if pool_data:
                                         status_text.text("Calculating Correlation Matrix & Efficient Frontier...")
                                         
                                         # 1. Clean Data & Calculate Returns
-                                        prices_df = pd.DataFrame(pool_data).fillna(method='ffill').fillna(method='bfill')
+                                        prices_df = pd.DataFrame(pool_data).ffill().bfill()
                                         # Ensure we have enough history
                                         if len(prices_df) > 50:
                                             returns_df = prices_df.pct_change().dropna()
                                             
                                             # 2. Run Optimizer
                                             optimizer = PortfolioOptimizer(returns_df)
-                                            result = optimizer.optimize_max_sharpe_ratio()
+                                            
+                                            # Progress Bar for potential Monte Carlo fallback
+                                            opt_prog = st.progress(0, text="Optimizing Portfolio...")
+                                            def update_opt_prog(p):
+                                                opt_prog.progress(p, text=f"Optimizing Portfolio... {int(p*100)}%")
+                                                
+                                            result = optimizer.optimize_max_sharpe_ratio(progress_callback=update_opt_prog)
+                                            opt_prog.empty()
                                             
                                             # 3. Format Candidates
                                             # We convert the portfolio weights directly into "candidates"
@@ -1760,7 +1827,13 @@ try:
                                                     
                                                     # 2. Fetch market data for these assets (Re-using external data fetcher)
                                                     # We need price history to calculate covariance
-                                                    market_data_map = fetch_market_data_pool(unique_hedges, timeframe="1y")
+                                                    # Progress Bar
+                                                    fetch_prog = st.progress(0, text="Fetching Market Data...")
+                                                    def update_fetch_prog(p):
+                                                        fetch_prog.progress(p, text=f"Fetching Market Data... {int(p*100)}%")
+                                                    
+                                                    market_data_map = fetch_market_data_pool(unique_hedges, timeframe="1y", _progress_callback=update_fetch_prog)
+                                                    fetch_prog.empty()
                                                     
                                                     # 3. Construct Returns DataFrame
                                                     price_data = {}
@@ -1775,13 +1848,19 @@ try:
                                                                 price_data[asset] = df_m['price_index']
                                                     
                                                     if price_data:
-                                                        prices_df = pd.DataFrame(price_data).fillna(method='ffill').fillna(method='bfill')
+                                                        prices_df = pd.DataFrame(price_data).ffill().bfill()
                                                         returns_df = prices_df.pct_change().dropna()
                                                         
                                                         if not returns_df.empty:
                                                             # 4. Run Optimizer
                                                             optimizer = PortfolioOptimizer(returns_df)
-                                                            opt_results = optimizer.simulate_frontier(n_portfolios=5000)
+                                                            
+                                                            sim_prog = st.progress(0, text="Simulating 5,000 Portfolios...")
+                                                            def update_sim_prog(p):
+                                                                sim_prog.progress(p, text=f"Simulating Portfolios... {int(p*100)}%")
+                                                                
+                                                            opt_results = optimizer.simulate_frontier(n_portfolios=5000, progress_callback=update_sim_prog)
+                                                            sim_prog.empty()
                                                             
                                                             # 5. Display Efficient Frontier Chart
                                                             frontier_df = opt_results.get('frontier_data')

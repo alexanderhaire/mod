@@ -1,7 +1,7 @@
 """External market data retrieval using AI generation for realistic estimates."""
 import datetime
 import random
-from typing import Any
+from typing import Any, Callable
 
 import streamlit as st
 from openai_clients import call_openai_structured_market_data
@@ -64,8 +64,7 @@ def fetch_agricultural_market_data(product_category: str, timeframe: str = '1y')
     }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_market_data_pool(universe: list[str], timeframe: str = '1y') -> dict[str, dict[str, Any]]:
+def fetch_market_data_pool(universe: list[str], timeframe: str = '1y', _progress_callback: Callable[[float], None] = None) -> dict[str, dict[str, Any]]:
     """
     Fetch market data for a list of commodities (futures universe).
     Returns a dictionary mapping commodity name to its data dict.
@@ -85,10 +84,17 @@ def fetch_market_data_pool(universe: list[str], timeframe: str = '1y') -> dict[s
     # Max workers = 10 to be respectful of rate limits but fast
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         future_to_item = {executor.submit(fetch_item, item): item for item in universe}
+        total_items = len(universe)
+        completed_count = 0
+        
         for future in concurrent.futures.as_completed(future_to_item):
             item, data = future.result()
             if data and data.get('data'):
                 pool_data[item] = data
+            
+            completed_count += 1
+            if _progress_callback:
+                _progress_callback(completed_count / total_items)
                 
     return pool_data
 

@@ -1000,6 +1000,7 @@ def recommend_optimal_buy_window(
     available_stock: float | None = None,
     today: datetime.date | None = None,
     on_order: float | None = None,
+    strategy: str = "mixed",
 ) -> dict[str, Any]:
     """
     Recommend the best day (within remaining coverage) to place a buy.
@@ -1010,6 +1011,8 @@ def recommend_optimal_buy_window(
     services) while still using learned trends instead of fixed thresholds.
     The window start is delayed when coverage/on-order are high to avoid
     recommending an immediate buy unless the price trend justifies it.
+
+    strategy: 'mixed' (default), 'inventory' (safety first), or 'price' (lowest cost first).
     """
     today = today or datetime.date.today()
 
@@ -1141,10 +1144,7 @@ def recommend_optimal_buy_window(
         best_day = 0
         expected_price = current_price
     else:
-        # User requested 80% weight on Inventory (Safety) and 20% on Price
-        # Inventory Score: Buying earlier is safer (1.0 at day 0, 0.0 at latest_day)
-        # Price Score: Lower price is better (1.0 at min_price, 0.0 at max_price)
-        
+        # User requested flexible strategies
         # 1. Calculate Price Score
         min_p = candidate_prices.min()
         max_p = candidate_prices.max()
@@ -1164,11 +1164,17 @@ def recommend_optimal_buy_window(
         else:
              inventory_scores = np.ones_like(candidates)
              
-        # 3. Combined Weighted Score
-        # 80% Inventory, 20% Price
-        final_scores = (0.8 * inventory_scores) + (0.2 * price_scores)
+        # 3. Determine Weights
+        w_inv, w_price = 0.8, 0.2
+        if strategy == "inventory":
+            w_inv, w_price = 1.0, 0.0
+        elif strategy == "price":
+            w_inv, w_price = 0.0, 1.0
         
-        # 4. Pick Best Day
+        # 4. Combined Weighted Score
+        final_scores = (w_inv * inventory_scores) + (w_price * price_scores)
+        
+        # 5. Pick Best Day
         best_idx = int(np.argmax(final_scores))
         best_day = int(candidates[best_idx])
         expected_price = float(candidate_prices[best_idx])

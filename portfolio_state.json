@@ -1,0 +1,27 @@
+{
+  "cash": 201000.0,
+  "holdings": {},
+  "history": [
+    {
+      "date": "2025-12-19 14:06:39.683979",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 100.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-19 14:06:56.074137",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 900.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-19 14:18:01.651974",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 200000.0,
+      "price": 1.0
+    }
+  ]
+}
