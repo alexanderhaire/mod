@@ -13,8 +13,13 @@ class PortfolioManager:
     Manages a persistent portfolio using a local JSON file.
     Tracks: Cash, Holdings, Transaction History.
     """
-    def __init__(self, filepath=PORTFOLIO_FILE):
-        self.filepath = filepath
+    def __init__(self, mode="paper"):
+        self.mode = mode
+        if self.mode == "real":
+            self.filepath = "portfolio_state_real.json"
+        else:
+            self.filepath = "portfolio_state.json"  # Default/Paper
+            
         self.state = self._load_state()
 
     def _load_state(self):
@@ -109,4 +114,53 @@ class PortfolioManager:
             "value": value,
             "price": price
         })
+    
+    def execute_predictive_rebalancing(self, predicted_weights: dict[str, float], current_prices: dict[str, float]):
+        """
+        Rebalance portfolio based on ML predictions.
+        
+        Args:
+            predicted_weights: Dict of asset -> predicted optimal weight
+            current_prices: Dict of asset -> current market price
+        """
+        summary = self.get_portfolio_summary()
+        total_capital = summary["Total Value"]
+        
+        # Convert weights to dollar allocations
+        target_allocations = {
+            asset: weight * total_capital
+            for asset, weight in predicted_weights.items()
+        }
+        
+        # Execute rebalancing
+        blueprint = pd.DataFrame([
+            {"Item": asset, "Allocated Capital": allocation}
+            for asset, allocation in target_allocations.items()
+        ])
+        
+        self.execute_rebalancing(blueprint)
+        LOGGER.info(f"Predictive rebalancing complete. {len(predicted_weights)} positions.")
+    
+    def get_performance_metrics(self) -> dict:
+        """Calculate portfolio performance statistics."""
+        history = pd.DataFrame(self.state["history"])
+        
+        if history.empty:
+            return {
+                "total_deposits": 0,
+                "total_withdrawals": 0,
+                "total_return_pct": 0
+            }
+        
+        deposits = history[history["action"] == "DEPOSIT"]["value"].sum()
+        summary = self.get_portfolio_summary()
+        
+        total_return = (summary["Total Value"] - deposits) / deposits if deposits > 0 else 0
+        
+        return {
+            "total_deposits": deposits,
+            "current_value": summary["Total Value"],
+            "total_return_pct": total_return,
+            "total_trades": len(history[history["action"] == "REBALANCE"])
+        }
 

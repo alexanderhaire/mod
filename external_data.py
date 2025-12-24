@@ -1,182 +1,293 @@
-"""External market data retrieval using AI generation for realistic estimates."""
+
 import datetime
 import random
-from typing import Any, Callable
+import logging
+import pandas as pd
+import yfinance as yf
+from typing import Any, Dict, List
+from constants import LOGGER
 
-import streamlit as st
-from openai_clients import call_openai_structured_market_data
+# Mapping UI Names to Yahoo Finance Tickers
+TICKER_MAP = {
+    # --- GLOBAL INDICES ---
+    "S&P 500": "^GSPC", "Nasdaq 100": "^NDX", "Dow Jones": "^DJI", "Russell 2000": "^RUT", "Wilshire 5000": "^W5000", "VIX": "^VIX",
+    "Nikkei 225 (Japan)": "^N225", "DAX (Germany)": "^GDAXI", "FTSE 100 (UK)": "^FTSE", "CAC 40 (France)": "^FCHI",
+    "Euro Stoxx 50": "^STOXX50E", "STOXX 600 (Europe)": "^STOXX", "AEX (Netherlands)": "^AEX", "IBEX 35 (Spain)": "^IBEX", "FTSE MIB (Italy)": "FTSEMIB.MI",
+    "Hang Seng (HK)": "^HSI", "Nifty 50 (India)": "^NSEI", "Shanghai Composite": "000001.SS", "CSI 300 (China)": "000300.SS", "Bovespa (Brazil)": "^BVSP",
+    "KOSPI (Korea)": "^KS11", "ASX 200 (Australia)": "^AXJO", "TSX Composite (Canada)": "^GSPTSE", "JSX (Indonesia)": "^JKSE", "SET (Thailand)": "^SET.BK",
+    "IPC (Mexico)": "^MXX", "MERVAL (Argentina)": "^MERV", "TASI (Saudi Arabia)": "^TASI.SR", "STI (Singapore)": "^STI",
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_agricultural_market_data(product_category: str, timeframe: str = '1y') -> dict[str, Any]:
+    # --- ETFS ---
+    "XLE (Energy)": "XLE", "XLB (Materials)": "XLB", "XLI (Industrials)": "XLI", "XLP (Consumer Staples)": "XLP", "XLY (Consumer Discretionary)": "XLY",
+    "XLV (Health Care)": "XLV", "XLF (Financials)": "XLF", "XLK (Technology)": "XLK", "XLU (Utilities)": "XLU", "XLC (Communication Services)": "XLC", "IYR (Real Estate)": "IYR",
+    "MOO (Agribusiness)": "MOO", "IYT (Transportation)": "IYT", "SMH (Semiconductors)": "SMH", "XBI (Biotech)": "XBI", "IBB (Biotech)": "IBB",
+    "KRE (Regional Banks)": "KRE", "KBE (Banks)": "KBE", "ITB (Home Construction)": "ITB", "XHB (Homebuilders)": "XHB",
+    "XME (Metals & Mining)": "XME", "JETS (Airlines)": "JETS", "TAN (Solar)": "TAN", "ICLN (Clean Energy)": "ICLN", "URA (Uranium)": "URA",
+    "NLR (Nuclear)": "NLR", "LIT (Lithium)": "LIT", "REMX (Rare Earths)": "REMX", "COPX (Copper Miners)": "COPX", "SIL (Silver Miners)": "SIL",
+    "GDX (Gold Miners)": "GDX", "GDXJ (Junior Gold Miners)": "GDXJ", "OIH (Oil Services)": "OIH", "XOP (Oil & Gas E&P)": "XOP",
+    "AMLP (MLP Infrastructure)": "AMLP", "CORN (Corn Fund)": "CORN", "SOYB (Soybean Fund)": "SOYB", "WEAT (Wheat Fund)": "WEAT",
+    "DBA (Agriculture Fund)": "DBA", "DBC (Commodity Index)": "DBC", "GLTR (Precious Metals)": "GLTR", "PALL (Palladium ETF)": "PALL",
+    "WOOD (Timber)": "WOOD", "PHO (Water)": "PHO", "HACK (Cybersecurity)": "HACK", "SKYY (Cloud Computing)": "SKYY",
+    "IGV (Software)": "IGV", "XRT (Retail)": "XRT", "IYZ (Telecom)": "IYZ", "PBW (Clean Energy)": "PBW", "KWEB (China Tech)": "KWEB",
+
+    # --- LEVERAGED ETFs ---
+    "TQQQ (ProShares UltraPro QQQ)": "TQQQ", "SQQQ (ProShares UltraPro Short QQQ)": "SQQQ",
+    "SOXL (Direxion Daily Semi Bull 3X)": "SOXL", "SOXS (Direxion Daily Semi Bear 3X)": "SOXS",
+    "UPRO (ProShares UltraPro S&P500)": "UPRO", "SPXU (ProShares UltraPro Short S&P500)": "SPXU",
+    "TMF (Direxion Daily 20+ Yr Treasury Bull 3X)": "TMF", "TMV (Direxion Daily 20+ Yr Treasury Bear 3X)": "TMV",
+    "LABU (Direxion Daily Biotech Bull 3X)": "LABU", "LABD (Direxion Daily Biotech Bear 3X)": "LABD",
+    "YINN (Direxion Daily China Bull 3X)": "YINN", "YANG (Direxion Daily China Bear 3X)": "YANG",
+    "BOIL (ProShares Ultra Bloomberg Natural Gas)": "BOIL", "KOLD (ProShares UltraShort Bloomberg Natural Gas)": "KOLD",
+
+    # --- CURRENCIES ---
+    "EUR/USD": "EURUSD=X", "JPY/USD": "JPY=X", "GBP/USD": "GBPUSD=X", "CAD/USD": "CAD=X", "AUD/USD": "AUDUSD=X", "NZD/USD": "NZDUSD=X", "CHF/USD": "CHF=X", "DXY (Dollar Index)": "DX-Y.NYB",
+    "CNY/USD (Yuan)": "CNY=X", "MXN/USD (Peso)": "MXN=X", "BRL/USD (Real)": "BRL=X", "INR/USD (Rupee)": "INR=X",
+    "RUB/USD (Ruble)": "RUB=X", "ZAR/USD (Rand)": "ZAR=X", "TRY/USD (Lira)": "TRY=X", "KRW/USD (Won)": "KRW=X", "SGD/USD (Sing Dollar)": "SGD=X",
+    "HKD/USD (HK Dollar)": "HKD=X", "SEK/USD (Krona)": "SEK=X", "NOK/USD (Krone)": "NOK=X", "PLN/USD (Zloty)": "PLN=X", "HUF/USD (Forint)": "HUF=X",
+    "CZK/USD (Koruna)": "CZK=X", "THB/USD (Baht)": "THB=X", "IDR/USD (Rupiah)": "IDR=X", "MYR/USD (Ringgit)": "MYR=X", "PHP/USD (Peso)": "PHP=X",
+    "VND/USD (Dong)": "VND=X", "CLP/USD (Chilean Peso)": "CLP=X", "COP/USD (Col Peso)": "COP=X", "PEN/USD (Sol)": "PEN=X", "ARS/USD (Argentina)": "ARS=X",
+
+    # --- METALS ---
+    "Gold (Comex)": "GC=F", "Silver (Comex)": "SI=F", "Platinum": "PL=F", "Palladium": "PA=F", "Copper (Comex)": "HG=F", 
+    
+    # --- ENERGY ---
+    "Crude Oil (WTI)": "CL=F", "Brent Crude (ICE)": "BZ=F", "Natural Gas (Henry Hub)": "NG=F", "Natural Gas (TTF Dutch)": "TTF=F", "JKM (LNG Asia)": "JKM=F",
+    "Heating Oil (ULSD)": "HO=F", "RBOB Gasoline": "RB=F", "Ethanol (CBOT)": "CU=F", 
+    
+    # --- AGRICULTURE ---
+    "Corn (CBOT)": "ZC=F", "Soybeans (CBOT)": "ZS=F", "Soybean Meal (CBOT)": "ZM=F", "Soybean Oil (CBOT)": "ZL=F",
+    "Wheat (SRW CBOT)": "ZW=F", "Wheat (Matif Milling)": "KE=F", # Proxy KC Wheat
+    "Cocoa (ICE NY)": "CC=F", "Coffee (Arabica)": "KC=F", 
+    "Sugar #11 (Raw)": "SB=F", "Cotton #2": "CT=F", "Orange Juice (FCOJ)": "OJ=F", 
+    
+    # --- CRYPTO ---
+    "Bitcoin (BTC)": "BTC-USD", "Ethereum (ETH)": "ETH-USD", "Tether (USDT)": "USDT-USD", "BNB (BNB)": "BNB-USD", "Solana (SOL)": "SOL-USD", "USDC (USDC)": "USDC-USD", "XRP (XRP)": "XRP-USD", "Dogecoin (DOGE)": "DOGE-USD",
+    "Cardano (ADA)": "ADA-USD", "Shiba Inu (SHIB)": "SHIB-USD", "Avalanche (AVAX)": "AVAX-USD", "TRON (TRX)": "TRX-USD", "Polkadot (DOT)": "DOT-USD", "Bitcoin Cash (BCH)": "BCH-USD", "Chainlink (LINK)": "LINK-USD",
+    "Polygon (MATIC)": "MATIC-USD", "Litecoin (LTC)": "LTC-USD", "Internet Computer (ICP)": "ICP-USD", "Uniswap (UNI)": "UNI-USD", "Ethereum Classic (ETC)": "ETC-USD", "Filecoin (FIL)": "FIL-USD",
+    "Bitcoin Futures (CME)": "BTC=F", "Ethereum Futures (CME)": "ETH=F", "BITO (ETF)": "BITO", "GBTC": "GBTC", "ETHE": "ETHE",
+    
+    # --- STOCKS ---
+    "Dow Inc (DOW)": "DOW", "LyondellBasell (LYB)": "LYB", "Westlake (WLK)": "WLK", "Eastman (EMN)": "EMN", "Celanese (CE)": "CE",
+    "BASF (Germany)": "BAS.DE", "Bayer (Germany)": "BAYN.DE", "Nutrien (NTR)": "NTR", "Mosaic (MOS)": "MOS", "CF Industries (CF)": "CF",
+    "Yara International (Norway)": "YAR.OL", "Corteva (CTVA)": "CTVA", "FMC Corp": "FMC", "Albemarle (ALB)": "ALB",
+    "ExxonMobil (XOM)": "XOM", "Chevron (CVX)": "CVX", "Shell (SHEL)": "SHEL", "BP": "BP", "TotalEnergies": "TTE",
+    "Caterpillar (CAT)": "CAT", "Union Pacific (UNP)": "UNP", "FedEx": "FDX", "UPS": "UPS"
+}
+
+def get_market_context() -> list:
+    """Fallback if needed."""
+    return []
+
+def get_usage_forecasts(item_number: str) -> Dict[str, Any]:
+    """Stub."""
+    return {}
+
+def fetch_agricultural_market_data(commodity: str, timeframe: str = "6m") -> Dict[str, Any]:
     """
-    Fetch agricultural market data using AI to generate realistic estimates based on current market conditions.
-    Cached for 1 hour to prevent excessive API calls.
+    Fetch REAL market data from Yahoo Finance.
     """
-    category = product_category or 'General Agriculture'
-    today = datetime.date.today()
+    ticker = TICKER_MAP.get(commodity)
     
-    # Call AI for structured data
-    ai_data = call_openai_structured_market_data(category, today)
-    
-    if not ai_data:
-        # Fallback to safe defaults if AI fails
-        return {
-            'commodity': category,
-            'timeframe': timeframe,
-            'current_price_index': 100.0,
-            'trend': 'stable',
-            'volatility': 'low',
-            'data': []
-        }
-        
-    # Generate trend data points based on the AI's summary stats
-    months = 12 if timeframe == '1y' else 6
-    trends = []
-    base_price = ai_data.get('current_price_index', 100.0)
-    trend_direction = 1 if ai_data.get('trend') == 'increasing' else -1 if ai_data.get('trend') == 'decreasing' else 0
-    volatility_factor = 0.05 if ai_data.get('volatility') == 'high' else 0.02
-    
-    for i in range(months):
-        date = today - datetime.timedelta(days=30 * (months - i - 1))
-        # Reverse engineer the price curve
-        # If trend is up, past prices were lower.
-        progress = i / months
-        trend_impact = trend_direction * (0.1 * (1 - progress)) # 10% swing over the year
-        noise = random.uniform(-volatility_factor, volatility_factor)
-        
-        price = base_price * (1 - trend_impact + noise)
-        
-        trends.append({
-            'date': date.isoformat(),
-            'month': date.strftime('%B %Y'),
-            'commodity': ai_data.get('commodity'),
-            'price_index': round(price, 2),
-            'volume_index': random.randint(80, 120)
-        })
-        
-    return {
-        'commodity': ai_data.get('commodity'),
-        'timeframe': timeframe,
-        'current_price_index': base_price,
-        'trend': ai_data.get('trend'),
-        'volatility': ai_data.get('volatility'),
-        'data': trends
-    }
-
-
-def fetch_market_data_pool(universe: list[str], timeframe: str = '1y', _progress_callback: Callable[[float], None] = None) -> dict[str, dict[str, Any]]:
-    """
-    Fetch market data for a list of commodities (futures universe).
-    Returns a dictionary mapping commodity name to its data dict.
-    """
-    pool_data = {}
-    
-    # Use parallel execution to speed up the "Cold Start" 
-    # (Fetching 50+ items sequentially would take 2+ minutes)
-    import concurrent.futures
-    
-    def fetch_item(item):
-        try:
-            return item, fetch_agricultural_market_data(item, timeframe)
-        except Exception:
-            return item, None
-
-    # Max workers = 10 to be respectful of rate limits but fast
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_item = {executor.submit(fetch_item, item): item for item in universe}
-        total_items = len(universe)
-        completed_count = 0
-        
-        for future in concurrent.futures.as_completed(future_to_item):
-            item, data = future.result()
-            if data and data.get('data'):
-                pool_data[item] = data
+    # 1. Fallback for unmapped assets: Use a proxy or return empty
+    if not ticker:
+        # Try to guess if it's a known stock symbol in parens e.g. "Apple (AAPL)" -> AAPL
+        import re
+        match = re.search(r'\((.*?)\)', commodity)
+        if match:
+            ticker = match.group(1)
+        else:
+            # If still nothing, return a dummy structure to prevent app crash, 
+            # but log warning.
+            return {
+                "commodity": commodity,
+                "current_price_index": 100.0,
+                "trend": "neutral",
+                "volatility": "low",
+                "forecast": "flat",
+                "data": []
+            }
             
-            completed_count += 1
-            if _progress_callback:
-                _progress_callback(completed_count / total_items)
+    # 2. Fetch Data
+    try:
+        # Map timeframe to yfinance period
+        period = "6mo"
+        if timeframe == "1y": period = "1y"
+        elif timeframe == "5y": period = "5y"
+        elif timeframe == "1mo": period = "1mo"
+        
+        df = yf.download(ticker, period=period, progress=False, timeout=10)
+        
+        if df.empty:
+            raise ValueError("No data returned")
+            
+        # 3. Format Response
+        # Handle MultiIndex columns (e.g. ('Adj Close', 'AAPL')) or Single Index ('Adj Close')
+        # Flatten columns if multi-index
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+            
+        # Select best price column
+        price_col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
+        if price_col not in df.columns:
+             # Fallback: take the first column if typical names missing
+             price_col = df.columns[0]
+             
+        current_price = float(df[price_col].iloc[-1])
+        start_price = float(df[price_col].iloc[0])
+        
+        # Calculate simple trend
+        change = (current_price - start_price) / start_price
+        trend = "increasing" if change > 0.05 else "decreasing" if change < -0.05 else "stable"
+        
+        # Calculate Volatility
+        rets = df[price_col].pct_change().dropna()
+        vol = rets.std() * (252 ** 0.5) # Annualized
+        vol_str = "high" if vol > 0.3 else "medium" if vol > 0.15 else "low"
+        
+        # Format Data Points
+        trends = []
+        for date, row in df.iterrows():
+            # yfinance returns pandas Timestamp in index
+            try:
+                price_val = float(row[price_col])
+            except:
+                continue # Skip bad rows
                 
-    return pool_data
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_commodity_prices(commodity_type: str) -> dict[str, Any]:
-    """
-    Get current commodity price snapshot.
-    """
-    # We can reuse the main fetcher for this or keep it simple.
-    # For now, let's just wrap the main fetcher since it returns similar info,
-    # or just do a quick lightweight estimate.
-    # To save tokens, we'll just mock this part or make it consistent with the main fetcher.
-    # Let's use the main fetcher to ensure consistency.
-    data = fetch_agricultural_market_data(commodity_type)
-    
-    return {
-        'commodity': commodity_type,
-        'current_price': data.get('current_price_index', 100.0),
-        'currency': 'USD',
-        'unit': 'Index',
-        'change_30day': random.uniform(-5, 5), # Minor randomization for the ticker
-        'change_90day': random.uniform(-10, 10),
-        'last_updated': datetime.datetime.now().isoformat()
-    }
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_usage_forecasts(product_category: str) -> dict[str, Any]:
-    """
-    Get usage forecasts based on AI market analysis.
-    """
-    # We can actually extract this from the same AI call if we want to be efficient,
-    # but for separation of concerns, we'll call it again (cached) or rely on the previous cache if the args match?
-    # Actually, fetch_agricultural_market_data returns a dict that *could* contain this if we expanded it.
-    # But let's just call the AI again, it's fine for now given the cache.
-    
-    category = product_category or 'General'
-    today = datetime.date.today()
-    ai_data = call_openai_structured_market_data(category, today)
-    
-    if not ai_data:
+            trends.append({
+                'date': date.strftime('%Y-%m-%d'),
+                'month': date.strftime('%B %Y'),
+                'commodity': commodity,
+                'price_index': round(price_val, 2),
+                'volume_index': 100 # Placeholder
+            })
+            
         return {
-            'product_category': category,
-            'current_demand_level': 'moderate',
-            'demand_score': 50,
-            'forecast_next_30days': 'stable',
-            'forecast_next_90days': 'stable',
-            'seasonal_pattern': 'none',
-            'confidence': 0.5
+            "commodity": commodity,
+            "current_price_index": round(current_price, 2),
+            "trend": trend,
+            "volatility": vol_str,
+            "forecast": "Unknown", # No forecast for real data
+            "data": trends
         }
         
-    return {
-        'product_category': category,
-        'current_demand_level': ai_data.get('demand_level', 'moderate'),
-        'demand_score': ai_data.get('demand_score', 50),
-        'forecast_next_30days': ai_data.get('forecast_next_30d', 'stable'),
-        'forecast_next_90days': 'stable', # AI didn't return this specific one in my prompt, defaulting
-        'seasonal_pattern': ai_data.get('seasonal_pattern', 'moderate'),
-        'confidence': 0.85
-    }
+    except Exception as e:
+        LOGGER.warning(f"Failed to fetch real data for {commodity} ({ticker}): {e}")
+        return {
+            "commodity": commodity,
+            "current_price_index": 0.0,
+            "trend": "error",
+            "volatility": "error",
+            "forecast": "error",
+            "data": []
+        }
 
-
-def get_market_context(product_category: str) -> str:
+def fetch_market_data_pool(commodities: List[str], _progress_callback=None) -> Dict[str, Dict[str, Any]]:
     """
-    Generate a market context narrative for LLM consumption.
+    Batch fetch data for multiple commodities using yfinance batch download.
+    This is significantly faster and more robust than looping.
     """
-    ag_data = fetch_agricultural_market_data(product_category)
-    forecast = get_usage_forecasts(product_category)
+    # 1. Gather Tickers
+    ticker_map_reverse = {}
+    valid_tickers = []
     
-    context = f"""
-EXTERNAL MARKET CONTEXT ({datetime.date.today().isoformat()}):
+    for comm in commodities:
+        t = TICKER_MAP.get(comm)
+        # Strick matching only: do NOT guess tickers to avoid 404s on "Countries" or "Indices"
+        if t:
+            valid_tickers.append(t)
+            ticker_map_reverse[comm] = t
+            
+    if not valid_tickers:
+        return {}
 
-Agricultural Commodity: {ag_data['commodity'].title()}
-- Current Price Index: {ag_data['current_price_index']:.2f}
-- Trend (12mo): {ag_data['trend'].title()}
-- Volatility: {ag_data['volatility'].title()}
+    # 2. Batch Download (2y history)
+    try:
+        # group_by='ticker' ensures we get a MultiIndex with Ticker at level 0
+        batch_df = yf.download(valid_tickers, period="2y", group_by='ticker', progress=False, timeout=20, threads=True)
+    except Exception as e:
+        LOGGER.error(f"Batch download failed: {e}")
+        return {}
 
-Demand Forecast:
-- Current Demand: {forecast['current_demand_level'].title()} (Score: {forecast['demand_score']}/100)
-- Next 30 Days: {forecast['forecast_next_30days'].title()}
-- Seasonal Pattern: {forecast['seasonal_pattern'].title()}
-"""
-    return context.strip()
+    pool = {}
+    total_items = len(commodities)
+    
+    # 3. Process Each Commodity
+    for i, comm in enumerate(commodities):
+        ticker = ticker_map_reverse.get(comm)
+        res = {
+                "commodity": comm,
+                "current_price_index": 0.0,
+                "trend": "error",
+                "volatility": "error",
+                "forecast": "error",
+                "data": []
+            }
 
+        if ticker and not batch_df.empty:
+            try:
+                # Extract data for this ticker
+                # If only 1 ticker requested, yfinance returns flat DF (no MultiIndex)
+                if len(valid_tickers) == 1:
+                    df = batch_df
+                else:
+                    if ticker in batch_df.columns.get_level_values(0):
+                        df = batch_df[ticker]
+                    else:
+                        df = pd.DataFrame() # Ticker missing from batch result
+
+                if not df.empty:
+                    # Logic matches fetch_agricultural_market_data
+                    price_col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
+                    if price_col not in df.columns and len(df.columns) > 0:
+                        price_col = df.columns[0]
+                    
+                    if price_col in df.columns:
+                        # Clean failures
+                        df = df.dropna(subset=[price_col])
+                        
+                        if not df.empty:
+                            current_price = float(df[price_col].iloc[-1])
+                            start_price = float(df[price_col].iloc[0])
+                            
+                            # Trend
+                            change = (current_price - start_price) / start_price if start_price != 0 else 0
+                            trend = "increasing" if change > 0.05 else "decreasing" if change < -0.05 else "stable"
+                            
+                            # Volatility
+                            rets = df[price_col].pct_change().dropna()
+                            vol = rets.std() * (252 ** 0.5)
+                            vol_str = "high" if vol > 0.3 else "medium" if vol > 0.15 else "low"
+                            
+                            # Data Points
+                            trends = []
+                            for date, row in df.iterrows():
+                                try:
+                                    price_val = float(row[price_col])
+                                    trends.append({
+                                        'date': date.strftime('%Y-%m-%d'),
+                                        'month': date.strftime('%B %Y'),
+                                        'commodity': comm,
+                                        'price_index': round(price_val, 2),
+                                        'volume_index': 100
+                                    })
+                                except:
+                                    continue
+                                    
+                            res = {
+                                "commodity": comm,
+                                "current_price_index": round(current_price, 2),
+                                "trend": trend,
+                                "volatility": vol_str,
+                                "forecast": "Unknown",
+                                "data": trends
+                            }
+
+            except Exception as inner_e:
+                LOGGER.warning(f"Error processing batch data for {comm}: {inner_e}")
+        
+        pool[comm] = res
+        
+        if _progress_callback:
+            _progress_callback((i + 1) / total_items)
+
+    return pool

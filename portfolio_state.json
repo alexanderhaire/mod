@@ -1,5 +1,5 @@
 {
-  "cash": 201000.0,
+  "cash": 261000.0,
   "holdings": {},
   "history": [
     {
@@ -21,6 +21,48 @@
       "action": "DEPOSIT",
       "asset": "CASH",
       "value": 200000.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-23 14:18:05.062056",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 10000.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-23 14:18:13.163582",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 10000.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-23 14:18:16.963024",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 10000.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-23 15:36:40.150668",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 10000.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-23 15:36:43.563643",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 10000.0,
+      "price": 1.0
+    },
+    {
+      "date": "2025-12-23 15:36:45.031736",
+      "action": "DEPOSIT",
+      "asset": "CASH",
+      "value": 10000.0,
       "price": 1.0
     }
   ]
