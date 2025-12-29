@@ -15,6 +15,7 @@ import streamlit.components.v1 as components
 
 try:
     import altair as alt
+    alt.data_transformers.disable_max_rows() # Allow large heatmaps
 except ImportError:
     alt = None
 from auth import authenticate_user, authenticate_vendor, authenticate_broker, ensure_user_store, is_admin, register_user
@@ -59,6 +60,7 @@ from market_insights import (
 )
 from ml_engine import OnlineLinearRegressor, PortfolioOptimizer, Backtester
 from portfolio_manager import PortfolioManager
+from auto_trader import AutoTrader
 import fifo_tracker
 from wizard_ui import WizardFlow
 from onboarding_tour import OnboardingTour, render_tour_overlay, init_tour_for_new_user
@@ -136,6 +138,24 @@ def _ensure_new_chat(name: str | None = None) -> dict:
 
 
 st.sidebar.caption("System v1.5.1 [ML Logic Active]")
+
+st.sidebar.divider()
+st.sidebar.markdown("### ⚡ Execution Mode")
+mode_select = st.sidebar.selectbox(
+    "Trading Environment",
+    ["Simulation (JSON Only)", "Alpaca Paper (API)", "Alpaca Live (Real Money)"],
+    index=0
+)
+
+# Map friendly name to internal mode string
+if "Simulation" in mode_select:
+    exec_mode = "paper"
+elif "Paper" in mode_select:
+    exec_mode = "live" # Uses secrets.toml [alpaca] keys (usually paper endpoint)
+else:
+    exec_mode = "real" # Not fully supported yet, creates different state file
+
+st.session_state.execution_mode = exec_mode
 
 # Restart Tour button (shown when user is logged in)
 # Restart Tour button (shown when user is logged in)
@@ -666,9 +686,54 @@ def render_quant_dashboard():
             st.rerun()
 
     # --- PORTFOLIO DASHBOARD ---
+    
+    # Initialize Auto-Trader in Session State
+    if "auto_trader" not in st.session_state:
+        st.session_state.auto_trader = AutoTrader(mode="paper")
+    
+    trader = st.session_state.auto_trader
+    
     pm = PortfolioManager(mode="paper")
     summary = pm.get_portfolio_summary()
     total_equity = summary["Total Value"]
+    
+    # LIVE TRADER CONTROL PANEL
+    st.divider()
+    st.subheader(f"🟢 LIVE AUTO-TRADER [{trader.get_execution_mode_label()}]")
+    
+    t_col1, t_col2, t_col3 = st.columns([1, 1, 2])
+    
+    with t_col1:
+        is_running = st.toggle("ACTIVATE TRADING LOOP", key="trader_switch")
+    
+    with t_col2:
+        st.metric("Heartbeat", f"{trader.iteration_count} ticks")
+        
+    with t_col3:
+        if is_running:
+            st.info("⚡ Neural Loop Active: Scanning Cross-Asset Correlations...")
+            # THE LOOP
+            import time
+            placeholder = st.empty()
+            
+            # Run a micro-loop (e.g. 5 steps) to simulate activity without blocking forever
+            # In a real deployed app, this would be a background thread.
+            for _ in range(5):
+                tick_result = trader.heart_beat()
+                
+                with placeholder.container():
+                    st.json(tick_result)
+                    
+                    # Updates dynamic chart
+                    if "equity" in tick_result:
+                        st.caption(f"Simulated Equity: ${tick_result['equity']:,.2f}")
+                        
+                time.sleep(0.5)
+            
+            st.rerun() # Refresh to show new logs/state
+            
+        else:
+            st.caption("System Standby. Activate to begin automated execution.")
     
     st.divider()
     
@@ -742,25 +807,61 @@ def render_quant_dashboard():
         for ticker, bundle in pool_data.items():
             if 'data' in bundle and bundle['data']:
                 df_t = pd.DataFrame(bundle['data'])
-                df_t['date'] = pd.to_datetime(df_t['date']).dt.date
+                # FIX: Canonicalize to UTC then remove timezone to ensure naive-naive consistency
+                df_t['date'] = pd.to_datetime(df_t['date'], utc=True).dt.tz_convert(None)
                 df_t = df_t.rename(columns={'price_index': ticker})
                 df_t = df_t.set_index('date')[[ticker]]
                 all_series.append(df_t)
         
         df_futures = pd.concat(all_series, axis=1) if all_series else pd.DataFrame()
         
+        # DEBUG: Universe Expansion Check
+        with st.expander("🔍 Dataset Diagnostics", expanded=True):
+             st.write(f"**ERP Assets:** {len(df_erp.columns)} items | Rows: {len(df_erp)}")
+             st.write(f"**Futures Assets:** {len(df_futures.columns)} items | Rows: {len(df_futures)}")
+             if df_futures.empty:
+                 st.error("⚠️ Futures Data is Empty. Check Internet Connection or YFinance.")
+             
         # Step C: Merge
         progress_bar.progress(0.95, text="Aligning Temporal Matrices...")
         df_combined = merge_erp_and_futures_data(df_erp, df_futures)
         progress_bar.progress(1.0, text="Data Stream Synced.")
         
         if df_combined.empty:
-            st.error("Insufficient market data to initialize optimizer (df_combined is empty).")
-            return
+             st.error(f"Merged Data is Empty. ERP Range: {df_erp.index.min()} to {df_erp.index.max()}. Futures Range: {df_futures.index.min() if not df_futures.empty else 'N/A'} to {df_futures.index.max() if not df_futures.empty else 'N/A'}")
+             return
 
         # Calculate Returns
         # Use fillna(0) instead of dropna() to prevent dropping all rows if one asset has a missing day (e.g. holidays)
-        df_returns = df_combined.pct_change().fillna(0)
+        df_returns = df_combined.pct_change(fill_method=None).fillna(0)
+
+        # ---------------------------------------------------------
+        # TRADABLE UNIVERSE FILTER
+        # ---------------------------------------------------------
+        # We separate "Signal Assets" (Indices, Futures, Forex) from "Tradable Assets" (Stocks, ETFs, Crypto)
+        # to ensure the Execution Engine allows receives valid orders.
+        from external_data import TICKER_MAP
+        tradable_subset = []
+        for asset in FUTURES_UNIVERSE:
+            try:
+                # 1. Get mapped ticker (or use asset itself if cleaned)
+                cleaned = asset.split(' ')[0].split('(')[0].strip()
+                if len(cleaned) >= 6 and cleaned.endswith("USD") and not cleaned.startswith("USDOLLAR"):
+                        cleaned = cleaned.replace("USD", "-USD")
+                
+                ticker = TICKER_MAP.get(asset, cleaned)
+                
+                # 2. Check overlap with Alpaca constraints
+                # ^ = Index (e.g. ^GSPC), = = Forex/Future (e.g. EUR=X, CL=F)
+                if ticker and ("^" in ticker or "=" in ticker):
+                    continue # Skip Non-Tradable Signal Asset
+                
+                tradable_subset.append(asset)
+            except:
+                pass
+        
+        # st.write(f"DEBUG: Tradable Subset Size: {len(tradable_subset)}")
+        # ---------------------------------------------------------
         
         # DEBUG: Show data health
         # st.write(f"Combined Data Shape: {df_combined.shape}")
@@ -796,8 +897,8 @@ def render_quant_dashboard():
         sol_col1, sol_col2 = st.columns([2, 1])
         
         with sol_col1:
-            # Default to current equity, or 1000000 if empty
-            default_cap = total_equity if total_equity > 0 else 1000000.0
+            # User Overwrite: Fixed $2000 Capital
+            default_cap = 2000.0
 
             # --- ML BACKTESTING SECTION ---
             st.divider()
@@ -822,7 +923,13 @@ def render_quant_dashboard():
                         def _update_progress(p):
                             progress_bar.progress(p, text=f"Backtesting... {int(p*100)}%")
                             
-                        results = backtester.run(df_combined, window_size=50, progress_callback=_update_progress)
+                        results = backtester.run(
+                            df_combined, 
+                            window_size=50, 
+                            progress_callback=_update_progress, 
+                            checkpoint_path="ml_checkpoint.pkl",
+                            tradable_assets=tradable_subset
+                        )
                         progress_bar.progress(1.0, text="Backtest Complete!")
                         progress_bar.empty()
                         
@@ -860,6 +967,7 @@ def render_quant_dashboard():
                             }))
                             
                             if st.button("🚀 Execute Recommendations (Rebalance Portfolio)"):
+                                pm = PortfolioManager(mode=st.session_state.get("execution_mode", "paper"))
                                 pm.execute_predictive_rebalancing(final_weights, {}) # Prices not strictly needed for this simple allocator
                                 st.success("Portfolio rebalanced based on ML predictions!")
                                 st.rerun()
@@ -874,8 +982,8 @@ def render_quant_dashboard():
         if st.button("🔥 EXECUTE QUANT SOLVER", type="primary"):
             # DEBUG: Show the inputs the optimizer is seeing
             # Data is MONTHLY resolution, so we must annualize by 12, not 252.
-            annual_ret = df_returns.mean() * 12
-            annual_vol = df_returns.std() * (12 ** 0.5)
+            annual_ret = df_returns.mean() * 252
+            annual_vol = df_returns.std() * (252 ** 0.5)
             sharpe = (annual_ret - risk_free) / annual_vol
             
             debug_df = pd.DataFrame({
@@ -887,7 +995,12 @@ def render_quant_dashboard():
             
             # Show top candidates
             st.caption("🔬 Top Candidates Detected (Pre-Optimization):")
-            st.dataframe(debug_df.head(10).style.format("{:.2%}"), height=200)
+            st.dataframe(debug_df.head(10).style.format({
+                "Exp. Return": "{:.2%}",
+                "Volatility": "{:.2%}",
+                "Sharpe": "{:.2f}",
+                "Data Points": "{:.0f}"
+            }), height=200)
 
             # CRITICAL FIX: The optimizer struggles with 100+ assets if many are low-quality/diluted.
             # We strictly filter to the Top 50 candidates before solving to ensure convergence.
@@ -901,7 +1014,7 @@ def render_quant_dashboard():
             df_optimized_universe = df_returns[valid_candidates]
 
             optimizer = PortfolioOptimizer(returns_df=df_optimized_universe, risk_free_rate=risk_free)
-            result = optimizer.optimize_max_sharpe_ratio()
+            result = optimizer.optimize_max_sharpe_ratio(tradable_assets=tradable_subset)
             
             st.success(f"**Optimization Complete!** Model Sharpe: {result['Sharpe']:.2f}")
             
@@ -927,7 +1040,7 @@ def render_quant_dashboard():
             st.dataframe(df_blue.style.format({"Weight": "{:.1%}", "Allocated Capital": "${:,.2f}"}), width="stretch")
             
             if st.button("🚀 SUBMIT TRADES TO BROKER/ERP"):
-                pm = PortfolioManager(mode="paper")
+                pm = PortfolioManager(mode=st.session_state.get("execution_mode", "paper"))
                 # Unified rebalancing
                 pm.execute_rebalancing(df_blue)
                 st.toast("Hedge Fund Portfolio Updated Successfully.", icon="📈")

@@ -65,6 +65,8 @@ TICKER_MAP = {
     "Cardano (ADA)": "ADA-USD", "Shiba Inu (SHIB)": "SHIB-USD", "Avalanche (AVAX)": "AVAX-USD", "TRON (TRX)": "TRX-USD", "Polkadot (DOT)": "DOT-USD", "Bitcoin Cash (BCH)": "BCH-USD", "Chainlink (LINK)": "LINK-USD",
     "Polygon (MATIC)": "MATIC-USD", "Litecoin (LTC)": "LTC-USD", "Internet Computer (ICP)": "ICP-USD", "Uniswap (UNI)": "UNI-USD", "Ethereum Classic (ETC)": "ETC-USD", "Filecoin (FIL)": "FIL-USD",
     "Bitcoin Futures (CME)": "BTC=F", "Ethereum Futures (CME)": "ETH=F", "BITO (ETF)": "BITO", "GBTC": "GBTC", "ETHE": "ETHE",
+    "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "SOLUSD": "SOL-USD", "AVAXUSD": "AVAX-USD", "LINKUSD": "LINK-USD", "UNIUSD": "UNI-USD",
+    "DOGEUSD": "DOGE-USD", "LTCUSD": "LTC-USD", "BCHUSD": "BCH-USD", "AAVEUSD": "AAVE-USD",
     
     # --- STOCKS ---
     "Dow Inc (DOW)": "DOW", "LyondellBasell (LYB)": "LYB", "Westlake (WLK)": "WLK", "Eastman (EMN)": "EMN", "Celanese (CE)": "CE",
@@ -191,8 +193,18 @@ def fetch_market_data_pool(commodities: List[str], _progress_callback=None) -> D
     valid_tickers = []
     
     for comm in commodities:
-        t = TICKER_MAP.get(comm)
-        # Strick matching only: do NOT guess tickers to avoid 404s on "Countries" or "Indices"
+        # Heuristic: Take first word provided it's uppercase.
+        # "SPY (S&P 500)" -> "SPY"
+        # "BTCUSD" -> "BTCUSD"
+        cleaned = comm.split(' ')[0].split('(')[0].strip()
+        
+        # Crypto Translation for YFinance (BTCUSD -> BTC-USD)
+        if len(cleaned) >= 6 and cleaned.endswith("USD") and not cleaned.startswith("USDOLLAR"):
+             cleaned = cleaned.replace("USD", "-USD")
+        
+        # Check against TICKER_MAP for explicit overrides, else use cleaned name
+        t = TICKER_MAP.get(comm, cleaned)
+        
         if t:
             valid_tickers.append(t)
             ticker_map_reverse[comm] = t

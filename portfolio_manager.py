@@ -21,6 +21,10 @@ class PortfolioManager:
             self.filepath = "portfolio_state.json"  # Default/Paper
             
         self.state = self._load_state()
+        
+        # Initialize Execution Bridge
+        from execution import AlpacaExecution
+        self.execution = AlpacaExecution(mode=self.mode)
 
     def _load_state(self):
         if os.path.exists(self.filepath):
@@ -32,7 +36,7 @@ class PortfolioManager:
         
         # Default State
         return {
-            "cash": 0.0,
+            "cash": 2000.0,
             "holdings": {},  # Ticker -> Quantity (or Value, simpler to track Value for now as prices change)
             # Tracking Value directly is tricky without price feeds. 
             # We will track "Allocated Capital" (Cost Basis) for simplicity in this V1 Paper Trader.
@@ -79,6 +83,20 @@ class PortfolioManager:
         
         # Target State
         target_map = dict(zip(blueprint_df['Item'], blueprint_df['Allocated Capital']))
+        
+        # --- EXECUTION BRIDGE ---
+        # If we have a live connection and are not in strict paper mode, execute!
+        if self.execution.connected and self.mode != "paper":
+             LOGGER.info("📡 Forwarding Rebalance Order to Alpaca Execution Engine...")
+             self.execution.rebalance_portfolio(target_map)
+             
+             # Sync local state to match "Live" reality
+             self.state["holdings"] = self.execution.get_positions()
+             summary = self.execution.get_account_summary()
+             self.state["cash"] = summary.get("cash", 0.0)
+             self.save_state()
+             return True
+        # ------------------------
         
         # 1. Sell / Reduce Overweight
         # (For this Paper Trader, we assume instant execution at current price, 

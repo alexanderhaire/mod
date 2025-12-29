@@ -1,69 +1,965 @@
 {
-  "cash": 261000.0,
+  "cash": 2000.0,
   "holdings": {},
   "history": [
     {
-      "date": "2025-12-19 14:06:39.683979",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 100.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:00.662945",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CSI 300 (China) (Signal: +0.9%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-19 14:06:56.074137",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 900.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:03.226826",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased DAX (Germany) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-19 14:18:01.651974",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 200000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:05.796716",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLE (Energy) (Signal: +-0.4%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-23 14:18:05.062056",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 10000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:08.369012",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CSI 300 (China) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-23 14:18:13.163582",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 10000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:10.933900",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased FTSE MIB (Italy) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-23 14:18:16.963024",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 10000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:13.508601",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KBE (Banks) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-23 15:36:40.150668",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 10000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:16.082791",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYR (Real Estate) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-23 15:36:43.563643",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 10000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:18.652988",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Hang Seng (HK) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
     },
     {
-      "date": "2025-12-23 15:36:45.031736",
-      "action": "DEPOSIT",
-      "asset": "CASH",
-      "value": 10000.0,
-      "price": 1.0
+      "date": "2025-12-26 15:07:21.220558",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLC (Communication Services) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:23.795826",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Nifty 50 (India) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:26.364348",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased FTSE MIB (Italy) (Signal: +-0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:28.931444",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CAC 40 (France) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:31.513671",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLB (Materials) (Signal: +-0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:34.098630",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased STI (Singapore) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:36.664654",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IPC (Mexico) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:39.232745",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLE (Energy) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:41.802220",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ITB (Home Construction) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:44.604400",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYR (Real Estate) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:47.159472",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TSX Composite (Canada) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:49.712288",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLP (Consumer Staples) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:52.267522",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CAC 40 (France) (Signal: +1.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:54.822432",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Euro Stoxx 50 (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:57.214266",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Wilshire 5000 (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:07:59.227161",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Bovespa (Brazil) (Signal: +1.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:01.790473",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KRE (Regional Banks) (Signal: +-0.5%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:03.848208",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYT (Transportation) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:05.497356",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased S&P 500 (Signal: +0.5%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:08.055812",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Nasdaq 100 (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:10.609577",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CSI 300 (China) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:34.749808",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XME (Metals & Mining) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:37.324456",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ASX 200 (Australia) (Signal: +-0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:39.912125",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLU (Utilities) (Signal: +-0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:42.497505",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ASX 200 (Australia) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:45.073577",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Shanghai Composite (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:47.635476",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased AEX (Netherlands) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:50.201900",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ITB (Home Construction) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:52.785451",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLC (Communication Services) (Signal: +-0.5%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:55.360888",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Wilshire 5000 (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:08:57.943948",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TSX Composite (Canada) (Signal: +-0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:00.519692",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Hang Seng (HK) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:03.083295",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KOSPI (Korea) (Signal: +0.5%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:05.650688",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SMH (Semiconductors) (Signal: +0.8%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:08.208274",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KOSPI (Korea) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:10.999910",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ASX 200 (Australia) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:13.560977",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Nikkei 225 (Japan) (Signal: +0.8%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:16.124251",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLI (Industrials) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:18.683784",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased JSX (Indonesia) (Signal: +0.9%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:21.275877",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SET (Thailand) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:23.844583",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XME (Metals & Mining) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:26.415381",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ITB (Home Construction) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:28.976520",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLY (Consumer Discretionary) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:31.561286",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased STOXX 600 (Europe) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:34.128885",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased STOXX 600 (Europe) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:36.726651",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased MOO (Agribusiness) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:39.287588",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ITB (Home Construction) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:41.857071",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XBI (Biotech) (Signal: +1.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:44.425413",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLF (Financials) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:46.992991",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Hang Seng (HK) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:49.566030",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYT (Transportation) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:52.126824",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SET (Thailand) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:54.696834",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased AEX (Netherlands) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:57.259929",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CSI 300 (China) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:09:59.824221",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IBEX 35 (Spain) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:02.412383",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYT (Transportation) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:04.974122",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XHB (Homebuilders) (Signal: +-0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:07.546760",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SMH (Semiconductors) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:10.115356",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SMH (Semiconductors) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:12.698961",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Nikkei 225 (Japan) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:15.276970",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLP (Consumer Staples) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:17.855156",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IPC (Mexico) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:20.420428",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SET (Thailand) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:22.983546",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLB (Materials) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:25.550555",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Shanghai Composite (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:28.121786",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Russell 2000 (Signal: +0.8%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:30.700566",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CAC 40 (France) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:33.284972",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Nikkei 225 (Japan) (Signal: +0.9%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:35.857790",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IBEX 35 (Spain) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:38.423313",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TASI (Saudi Arabia) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:40.987558",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLV (Health Care) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:43.547729",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased S&P 500 (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:46.110149",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased S&P 500 (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:48.689777",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLK (Technology) (Signal: +-0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:51.253705",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KOSPI (Korea) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:53.826526",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYR (Real Estate) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:56.393725",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CSI 300 (China) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:10:58.961387",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XHB (Homebuilders) (Signal: +0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:01.521700",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLB (Materials) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:04.087587",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TASI (Saudi Arabia) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:06.661178",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased JSX (Indonesia) (Signal: +0.8%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:09.227664",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ITB (Home Construction) (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:11.791159",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased FTSE 100 (UK) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:14.356242",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TSX Composite (Canada) (Signal: +0.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:16.919338",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Bovespa (Brazil) (Signal: +0.8%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:19.479755",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XME (Metals & Mining) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:22.043693",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Wilshire 5000 (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:24.606775",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased FTSE MIB (Italy) (Signal: +0.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:27.180840",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TSX Composite (Canada) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:29.743428",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased STI (Singapore) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:32.305486",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Dow Jones (Signal: +0.8%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:34.875121",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XBI (Biotech) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:37.435380",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Dow Jones (Signal: +0.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:39.998686",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased VIX (Signal: +-0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:42.565103",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased TASI (Saudi Arabia) (Signal: +-0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:45.142181",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased JSX (Indonesia) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:47.705759",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KRE (Regional Banks) (Signal: +-0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:50.268409",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IPC (Mexico) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:52.835601",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KBE (Banks) (Signal: +1.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:55.396255",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SET (Thailand) (Signal: +0.5%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:11:57.962608",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLK (Technology) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:00.527731",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLB (Materials) (Signal: +0.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:03.103530",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLP (Consumer Staples) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:05.676593",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased KOSPI (Korea) (Signal: +0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:08.243206",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased CAC 40 (France) (Signal: +-0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:10.810477",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased VIX (Signal: +-0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:13.373475",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYR (Real Estate) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:15.934544",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IBB (Biotech) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:18.494032",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XBI (Biotech) (Signal: +0.9%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:21.055902",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Dow Jones (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:23.622559",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased FTSE MIB (Italy) (Signal: +0.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:26.185897",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLK (Technology) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:28.747467",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IBB (Biotech) (Signal: +0.1%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:31.311753",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLP (Consumer Staples) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:33.873647",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IYT (Transportation) (Signal: +0.5%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:36.438501",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLK (Technology) (Signal: +0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:38.996065",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLC (Communication Services) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:41.555432",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased Hang Seng (HK) (Signal: +-0.0%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:44.116954",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased VIX (Signal: +-0.9%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:46.676968",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLU (Utilities) (Signal: +-0.2%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:49.240616",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLK (Technology) (Signal: +-0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:12:51.800380",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased MOO (Agribusiness) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:00.953128",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased ASX 200 (Australia) (Signal: +0.7%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:03.521867",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased SET (Thailand) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:06.095034",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased JSX (Indonesia) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:08.687324",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased IPC (Mexico) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:11.271897",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLV (Health Care) (Signal: +0.6%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:13.842025",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLU (Utilities) (Signal: +-0.4%)",
+      "value": 20.0,
+      "price": 100.0
+    },
+    {
+      "date": "2025-12-26 15:20:16.420437",
+      "action": "AUTO_REBALANCE",
+      "asset": "Increased XLC (Communication Services) (Signal: +0.3%)",
+      "value": 20.0,
+      "price": 100.0
     }
   ]
 }
