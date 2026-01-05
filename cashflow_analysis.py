@@ -8,8 +8,9 @@ prediction capabilities for procurement spend tracking.
 import datetime
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 import pyodbc
@@ -19,6 +20,31 @@ LOGGER = logging.getLogger(__name__)
 # Path for storing learned payment patterns
 PATTERNS_FILE = Path(__file__).parent / "data" / "payment_patterns.json"
 PREDICTIONS_FILE = Path(__file__).parent / "data" / "cashflow_predictions.json"
+
+
+@dataclass
+class CashFlowError:
+    """Structured error information for cash flow operations."""
+    code: str
+    message: str
+    user_message: str
+    details: Optional[str] = None
+    
+    def to_dict(self) -> dict:
+        return {
+            "error_code": self.code,
+            "error_message": self.message,
+            "user_message": self.user_message,
+            "details": self.details,
+        }
+
+
+class CashFlowException(Exception):
+    """Exception with structured error information."""
+    
+    def __init__(self, error: CashFlowError):
+        self.error = error
+        super().__init__(error.message)
 
 
 def _ensure_data_dir() -> None:
@@ -33,6 +59,10 @@ def _load_patterns() -> dict:
         try:
             with open(PATTERNS_FILE, "r") as f:
                 return json.load(f)
+        except json.JSONDecodeError as e:
+            LOGGER.warning(f"Invalid JSON in payment patterns file: {e}")
+        except PermissionError as e:
+            LOGGER.error(f"Permission denied reading payment patterns: {e}")
         except Exception as e:
             LOGGER.warning(f"Could not load payment patterns: {e}")
     return {"vendors": {}, "last_updated": None}
@@ -44,6 +74,8 @@ def _save_patterns(patterns: dict) -> None:
     try:
         with open(PATTERNS_FILE, "w") as f:
             json.dump(patterns, f, indent=2, default=str)
+    except PermissionError as e:
+        LOGGER.error(f"Permission denied saving payment patterns: {e}")
     except Exception as e:
         LOGGER.error(f"Could not save payment patterns: {e}")
 
@@ -55,6 +87,10 @@ def _load_predictions() -> dict:
         try:
             with open(PREDICTIONS_FILE, "r") as f:
                 return json.load(f)
+        except json.JSONDecodeError as e:
+            LOGGER.warning(f"Invalid JSON in predictions file: {e}")
+        except PermissionError as e:
+            LOGGER.error(f"Permission denied reading predictions: {e}")
         except Exception as e:
             LOGGER.warning(f"Could not load predictions: {e}")
     return {"predictions": [], "last_updated": None}
@@ -66,8 +102,61 @@ def _save_predictions(predictions: dict) -> None:
     try:
         with open(PREDICTIONS_FILE, "w") as f:
             json.dump(predictions, f, indent=2, default=str)
+    except PermissionError as e:
+        LOGGER.error(f"Permission denied saving predictions: {e}")
     except Exception as e:
         LOGGER.error(f"Could not save predictions: {e}")
+
+
+def _handle_db_error(e: Exception, operation: str) -> CashFlowError:
+    """Convert database exceptions to user-friendly error information."""
+    error_str = str(e).lower()
+    
+    if isinstance(e, pyodbc.OperationalError):
+        if "login" in error_str or "authentication" in error_str:
+            return CashFlowError(
+                code="AUTH_ERROR",
+                message=str(e),
+                user_message="Database authentication failed. Please check your credentials.",
+                details=operation,
+            )
+        elif "network" in error_str or "connection" in error_str or "server" in error_str:
+            return CashFlowError(
+                code="CONNECTION_ERROR",
+                message=str(e),
+                user_message="Could not connect to the database. Please check your network connection.",
+                details=operation,
+            )
+    elif isinstance(e, pyodbc.ProgrammingError):
+        if "invalid object" in error_str or "invalid column" in error_str:
+            return CashFlowError(
+                code="SCHEMA_ERROR",
+                message=str(e),
+                user_message="Database schema mismatch. Required tables or columns may be missing.",
+                details=operation,
+            )
+    elif isinstance(e, pyodbc.DataError):
+        return CashFlowError(
+            code="DATA_ERROR",
+            message=str(e),
+            user_message="Data format error. Some values could not be processed.",
+            details=operation,
+        )
+    elif isinstance(e, pyodbc.IntegrityError):
+        return CashFlowError(
+            code="INTEGRITY_ERROR",
+            message=str(e),
+            user_message="Data integrity constraint violation.",
+            details=operation,
+        )
+    
+    # Generic database error
+    return CashFlowError(
+        code="DATABASE_ERROR",
+        message=str(e),
+        user_message=f"Database error during {operation}. Please try again later.",
+        details=str(type(e).__name__),
+    )
 
 
 def get_cash_position_summary(cursor: pyodbc.Cursor) -> dict[str, Any]:
@@ -82,6 +171,7 @@ def get_cash_position_summary(cursor: pyodbc.Cursor) -> dict[str, Any]:
         - accuracy_score: Current prediction accuracy percentage
         - predictions_made: Total predictions made
         - vendors_with_patterns: Vendors with learned patterns
+        - error: Error information if query failed (optional)
     """
     today = datetime.date.today()
     day_30 = today + datetime.timedelta(days=30)
@@ -95,6 +185,7 @@ def get_cash_position_summary(cursor: pyodbc.Cursor) -> dict[str, Any]:
         "accuracy_score": 0,
         "predictions_made": 0,
         "vendors_with_patterns": 0,
+        "error": None,
     }
     
     try:
@@ -147,8 +238,17 @@ def get_cash_position_summary(cursor: pyodbc.Cursor) -> dict[str, Any]:
         delay_days = 7
         result["potential_delay_savings_7day"] = total_30 * daily_rate * delay_days
         
+    except pyodbc.Error as e:
+        error = _handle_db_error(e, "cash position analysis")
+        LOGGER.error(f"Database error in get_cash_position_summary: {error.message}")
+        result["error"] = error.to_dict()
     except Exception as e:
-        LOGGER.warning(f"Error querying PO data for cash position: {e}")
+        LOGGER.exception(f"Unexpected error in get_cash_position_summary: {e}")
+        result["error"] = CashFlowError(
+            code="UNEXPECTED_ERROR",
+            message=str(e),
+            user_message="An unexpected error occurred while analyzing cash position.",
+        ).to_dict()
     
     # Add accuracy metrics from learning system
     patterns = _load_patterns()
@@ -175,6 +275,7 @@ def get_cash_forecast_summary(cursor: pyodbc.Cursor, days_ahead: int = 90) -> di
         - by_vendor: List of {VENDORID, VENDNAME, Amount} dictionaries
         - total_outflow: Total forecasted outflow
         - po_count: Number of POs included
+        - error: Error information if query failed (optional)
     """
     today = datetime.date.today()
     end_date = today + datetime.timedelta(days=days_ahead)
@@ -184,6 +285,7 @@ def get_cash_forecast_summary(cursor: pyodbc.Cursor, days_ahead: int = 90) -> di
         "by_vendor": [],
         "total_outflow": 0,
         "po_count": 0,
+        "error": None,
     }
     
     try:
@@ -248,8 +350,17 @@ def get_cash_forecast_summary(cursor: pyodbc.Cursor, days_ahead: int = 90) -> di
         result["total_outflow"] = total
         result["po_count"] = count
         
+    except pyodbc.Error as e:
+        error = _handle_db_error(e, "cash forecast")
+        LOGGER.error(f"Database error in get_cash_forecast_summary: {error.message}")
+        result["error"] = error.to_dict()
     except Exception as e:
-        LOGGER.warning(f"Error generating cash forecast: {e}")
+        LOGGER.exception(f"Unexpected error in get_cash_forecast_summary: {e}")
+        result["error"] = CashFlowError(
+            code="UNEXPECTED_ERROR",
+            message=str(e),
+            user_message="An unexpected error occurred while generating cash forecast.",
+        ).to_dict()
     
     return result
 
@@ -261,6 +372,8 @@ def analyze_payment_terms_impact(cursor: pyodbc.Cursor) -> pd.DataFrame:
     Returns a DataFrame with columns:
         - VENDORID, VENDNAME, PaymentTerms, DaysToPayment
         - Last12MonthSpend, AnnualCashFlowImpact
+        
+    If an error occurs, returns an empty DataFrame. Check LOGGER for details.
     """
     try:
         # Get vendor payment terms and spending
@@ -309,8 +422,12 @@ def analyze_payment_terms_impact(cursor: pyodbc.Cursor) -> pd.DataFrame:
         
         return pd.DataFrame(data)
         
+    except pyodbc.Error as e:
+        error = _handle_db_error(e, "payment terms analysis")
+        LOGGER.error(f"Database error in analyze_payment_terms_impact: {error.message}")
+        return pd.DataFrame()
     except Exception as e:
-        LOGGER.warning(f"Error analyzing payment terms: {e}")
+        LOGGER.exception(f"Unexpected error in analyze_payment_terms_impact: {e}")
         return pd.DataFrame()
 
 
@@ -320,6 +437,8 @@ def get_monthly_spend_comparison(cursor: pyodbc.Cursor, months: int = 24) -> pd.
     
     Returns a DataFrame with columns:
         - Period, Year, Month, Spend, PriorYearSpend, YoYChange
+        
+    If an error occurs, returns an empty DataFrame. Check LOGGER for details.
     """
     try:
         query = f"""
@@ -363,8 +482,12 @@ def get_monthly_spend_comparison(cursor: pyodbc.Cursor, months: int = 24) -> pd.
             df = df.sort_values(["Year", "Month"])
         return df
         
+    except pyodbc.Error as e:
+        error = _handle_db_error(e, "monthly spend comparison")
+        LOGGER.error(f"Database error in get_monthly_spend_comparison: {error.message}")
+        return pd.DataFrame()
     except Exception as e:
-        LOGGER.warning(f"Error getting monthly spend comparison: {e}")
+        LOGGER.exception(f"Unexpected error in get_monthly_spend_comparison: {e}")
         return pd.DataFrame()
 
 
@@ -382,7 +505,7 @@ def calculate_po_delay_savings(
         cost_of_capital: Annual cost of capital (default 5%)
     
     Returns:
-        Dictionary with savings calculations
+        Dictionary with savings calculations and optional error info
     """
     result = {
         "delay_days": delay_days,
@@ -390,6 +513,7 @@ def calculate_po_delay_savings(
         "total_open_po_value": 0,
         "estimated_annual_savings": 0,
         "by_vendor": [],
+        "error": None,
     }
     
     try:
@@ -429,8 +553,17 @@ def calculate_po_delay_savings(
         result["total_open_po_value"] = total
         result["estimated_annual_savings"] = total * daily_rate * delay_days * 12
         
+    except pyodbc.Error as e:
+        error = _handle_db_error(e, "PO delay savings calculation")
+        LOGGER.error(f"Database error in calculate_po_delay_savings: {error.message}")
+        result["error"] = error.to_dict()
     except Exception as e:
-        LOGGER.warning(f"Error calculating PO delay savings: {e}")
+        LOGGER.exception(f"Unexpected error in calculate_po_delay_savings: {e}")
+        result["error"] = CashFlowError(
+            code="UNEXPECTED_ERROR",
+            message=str(e),
+            user_message="An unexpected error occurred while calculating savings.",
+        ).to_dict()
     
     return result
 
