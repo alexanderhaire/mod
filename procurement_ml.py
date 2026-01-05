@@ -874,3 +874,318 @@ class ProcurementMLOptimizer:
                 })
         
         return pd.DataFrame(results).sort_values('BuyScore', ascending=False)
+
+
+class WalkForwardValidator:
+    """
+    Walk-forward validation for procurement ML model.
+    
+    Performs rolling window backtesting with:
+    - In-sample training
+    - Out-of-sample prediction
+    - Bootstrap confidence intervals for accuracy
+    """
+    
+    def __init__(
+        self, 
+        cursor: pyodbc.Cursor,
+        train_window_months: int = 12,
+        test_window_months: int = 3,
+        n_bootstrap: int = 1000
+    ):
+        self.cursor = cursor
+        self.train_window = train_window_months
+        self.test_window = test_window_months
+        self.n_bootstrap = n_bootstrap
+        self.feature_builder = ProcurementFeatureBuilder(cursor)
+        self._validation_results: list[dict] = []
+    
+    def run_validation(
+        self, 
+        lookback_months: int = 24,
+        progress_callback: callable = None
+    ) -> dict[str, Any]:
+        """
+        Run walk-forward validation across historical data.
+        
+        Returns:
+            - accuracy_in_sample: Training accuracy
+            - accuracy_out_sample: True out-of-sample accuracy  
+            - confidence_interval_95: (lower, upper) for OOS accuracy
+            - confidence_interval_99: (lower, upper) for 99% confidence
+            - is_significant_99: Whether 99% CI > 50% (better than random)
+            - detailed_results: Per-period breakdown
+        """
+        LOGGER.info(f"Starting walk-forward validation with {lookback_months} months lookback")
+        
+        # Get all historical purchases
+        all_data = self._load_all_purchases(lookback_months)
+        
+        if len(all_data) < 100:
+            return {"error": f"Insufficient data: {len(all_data)} purchases (need 100+)"}
+        
+        # Calculate walk-forward splits
+        dates = sorted(all_data.keys())
+        n_periods = (lookback_months - self.train_window) // self.test_window
+        
+        if n_periods < 2:
+            return {"error": "Not enough data for walk-forward validation"}
+        
+        all_predictions = []
+        all_actuals = []
+        period_results = []
+        
+        for period_idx in range(n_periods):
+            if progress_callback:
+                progress_callback(period_idx / n_periods)
+            
+            # Define train/test windows
+            train_end_offset = self.train_window + (period_idx * self.test_window)
+            test_end_offset = train_end_offset + self.test_window
+            
+            # Get train data
+            train_data = self._filter_by_window(all_data, dates, 0, train_end_offset)
+            test_data = self._filter_by_window(all_data, dates, train_end_offset, test_end_offset)
+            
+            if len(train_data['features']) < 30 or len(test_data['features']) < 10:
+                continue
+            
+            # Train on in-sample
+            predictor = BuyWindowPredictor()
+            train_metrics = predictor.train(train_data['features'], train_data['labels'])
+            
+            if 'error' in train_metrics:
+                continue
+            
+            # Predict on out-of-sample
+            oos_predictions = []
+            oos_actuals = []
+            
+            for features, label in zip(test_data['features'], test_data['labels']):
+                pred = predictor.predict(features)
+                # Convert buy_score to binary: score >= 60 = "should buy"
+                predicted_buy = 1.0 if pred['buy_score'] >= 60 else 0.0
+                oos_predictions.append(predicted_buy)
+                oos_actuals.append(label)
+            
+            period_accuracy = np.mean(np.array(oos_predictions) == np.array(oos_actuals))
+            
+            period_results.append({
+                'period': period_idx + 1,
+                'train_samples': len(train_data['features']),
+                'test_samples': len(test_data['features']),
+                'train_r2': train_metrics.get('train_r2', 0),
+                'oos_accuracy': period_accuracy,
+            })
+            
+            all_predictions.extend(oos_predictions)
+            all_actuals.extend(oos_actuals)
+        
+        if not all_predictions:
+            return {"error": "No valid predictions generated"}
+        
+        # Calculate overall metrics
+        predictions_arr = np.array(all_predictions)
+        actuals_arr = np.array(all_actuals)
+        overall_accuracy = np.mean(predictions_arr == actuals_arr)
+        
+        # Bootstrap confidence intervals
+        ci_95 = self._bootstrap_ci(predictions_arr, actuals_arr, 0.95)
+        ci_99 = self._bootstrap_ci(predictions_arr, actuals_arr, 0.99)
+        
+        # Statistical significance: is 99% CI lower bound > 0.5?
+        is_significant = ci_99[0] > 0.5
+        
+        self._validation_results = period_results
+        
+        return {
+            "accuracy_in_sample": np.mean([p['train_r2'] for p in period_results]),
+            "accuracy_out_sample": overall_accuracy,
+            "confidence_interval_95": ci_95,
+            "confidence_interval_99": ci_99,
+            "is_significant_99": is_significant,
+            "total_predictions": len(all_predictions),
+            "n_periods": len(period_results),
+            "detailed_results": period_results,
+        }
+    
+    def _load_all_purchases(self, months: int) -> dict[datetime.date, list]:
+        """Load all purchases grouped by date."""
+        purchases_by_date: dict[datetime.date, list] = {}
+        
+        try:
+            query = f"""
+            SELECT 
+                l.ITEMNMBR,
+                h.RECEIPTDATE,
+                l.UNITCOST,
+                l.ACTLSHIP
+            FROM POP30300 h
+            JOIN POP30310 l ON h.POPRCTNM = l.POPRCTNM
+            WHERE h.RECEIPTDATE >= DATEADD(month, -{months}, GETDATE())
+              AND l.ACTLSHIP > 0
+              AND l.UNITCOST > 0
+            ORDER BY h.RECEIPTDATE
+            """
+            self.cursor.execute(query)
+            rows = self.cursor.fetchall()
+            
+            # Group by item to calculate percentiles
+            item_prices: dict[str, list] = {}
+            for row in rows:
+                item = row.ITEMNMBR.strip()
+                if item not in item_prices:
+                    item_prices[item] = []
+                item_prices[item].append(float(row.UNITCOST))
+            
+            # Calculate 30th percentile per item
+            item_p30 = {item: np.percentile(prices, 30) for item, prices in item_prices.items() if len(prices) >= 3}
+            
+            # Build labeled dataset
+            for row in rows:
+                item = row.ITEMNMBR.strip()
+                if item not in item_p30:
+                    continue
+                
+                date = row.RECEIPTDATE.date() if hasattr(row.RECEIPTDATE, 'date') else row.RECEIPTDATE
+                price = float(row.UNITCOST)
+                
+                # Label: 1.0 if this was a good buy (price <= 30th percentile)
+                label = 1.0 if price <= item_p30[item] else 0.0
+                
+                if date not in purchases_by_date:
+                    purchases_by_date[date] = []
+                
+                try:
+                    features = self.feature_builder.build_features(item, date)
+                    purchases_by_date[date].append({
+                        'features': features,
+                        'label': label,
+                        'item': item,
+                        'price': price,
+                    })
+                except:
+                    pass
+            
+        except Exception as e:
+            LOGGER.error(f"Error loading purchases: {e}")
+        
+        return purchases_by_date
+    
+    def _filter_by_window(
+        self, 
+        data: dict, 
+        dates: list, 
+        start_idx: int, 
+        end_idx: int
+    ) -> dict[str, list]:
+        """Filter data by date window index."""
+        features = []
+        labels = []
+        
+        # Convert month offsets to date indices
+        total_dates = len(dates)
+        start_date_idx = int((start_idx / (end_idx + self.test_window)) * total_dates)
+        end_date_idx = int((end_idx / (end_idx + self.test_window)) * total_dates)
+        
+        selected_dates = dates[start_date_idx:min(end_date_idx, total_dates)]
+        
+        for date in selected_dates:
+            for record in data.get(date, []):
+                features.append(record['features'])
+                labels.append(record['label'])
+        
+        return {'features': features, 'labels': labels}
+    
+    def _bootstrap_ci(
+        self, 
+        predictions: np.ndarray, 
+        actuals: np.ndarray, 
+        confidence: float
+    ) -> tuple[float, float]:
+        """Calculate bootstrap confidence interval for accuracy."""
+        n = len(predictions)
+        accuracies = []
+        
+        for _ in range(self.n_bootstrap):
+            indices = np.random.randint(0, n, size=n)
+            boot_acc = np.mean(predictions[indices] == actuals[indices])
+            accuracies.append(boot_acc)
+        
+        alpha = 1 - confidence
+        lower = np.percentile(accuracies, 100 * alpha / 2)
+        upper = np.percentile(accuracies, 100 * (1 - alpha / 2))
+        
+        return (float(lower), float(upper))
+
+
+class CriticalBuyFilter:
+    """
+    Filters items to only show those that MUST be bought today.
+    
+    Criteria for "Must Buy":
+    - Buy score >= 80 (ML recommendation)
+    - Confidence >= 0.7 (model is confident)
+    - Days of coverage < 14 (running low)
+    - OR price is at 52-week low AND coverage < 30
+    """
+    
+    def __init__(self, confidence_threshold: float = 0.7, coverage_threshold: int = 14):
+        self.confidence_threshold = confidence_threshold
+        self.coverage_threshold = coverage_threshold
+    
+    def filter_critical(
+        self, 
+        recommendations: pd.DataFrame
+    ) -> pd.DataFrame:
+        """
+        Filter to only critical buy items.
+        
+        Args:
+            recommendations: DataFrame from get_batch_recommendations()
+        
+        Returns:
+            Filtered DataFrame with only "must buy today" items
+        """
+        if recommendations.empty:
+            return recommendations
+        
+        # Criteria 1: High score + high confidence + low coverage
+        mask_urgent = (
+            (recommendations['BuyScore'] >= 80) &
+            (recommendations['Confidence'] >= self.confidence_threshold) &
+            (recommendations['DaysCoverage'] < self.coverage_threshold)
+        )
+        
+        # Criteria 2: Price opportunity (52w low) with moderate coverage concern
+        mask_opportunity = (
+            (recommendations['Price52wPct'] <= 0.1) &  # Bottom 10% of 52-week range
+            (recommendations['DaysCoverage'] < 30) &
+            (recommendations['Confidence'] >= 0.6)
+        )
+        
+        critical = recommendations[mask_urgent | mask_opportunity].copy()
+        critical['CriticalReason'] = ''
+        
+        # Add reason
+        critical.loc[mask_urgent, 'CriticalReason'] = 'LOW STOCK - Must buy'
+        critical.loc[mask_opportunity & ~mask_urgent, 'CriticalReason'] = 'PRICE OPPORTUNITY - 52w low'
+        
+        return critical.sort_values('DaysCoverage', ascending=True)
+    
+    def get_summary(self, critical_items: pd.DataFrame) -> str:
+        """Generate a summary message for critical items."""
+        if critical_items.empty:
+            return "No critical items requiring immediate purchase today."
+        
+        n_urgent = (critical_items['CriticalReason'] == 'LOW STOCK - Must buy').sum()
+        n_opportunity = len(critical_items) - n_urgent
+        
+        summary = f"**{len(critical_items)} Critical Items for Today**\n"
+        if n_urgent > 0:
+            summary += f"- {n_urgent} items with low stock (must buy)\n"
+        if n_opportunity > 0:
+            summary += f"- {n_opportunity} items at price opportunity\n"
+        
+        return summary
+
