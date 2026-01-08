@@ -35,7 +35,7 @@ def main():
         SELECT TOP 1 l.ITEMNMBR, COUNT(*) as PurchaseCount
         FROM POP30300 h
         JOIN POP30310 l ON h.POPRCTNM = l.POPRCTNM
-        WHERE l.ACTLSHIP > 0
+        WHERE l.EXTDCOST > 0
         GROUP BY l.ITEMNMBR
         HAVING COUNT(*) >= 5
         ORDER BY PurchaseCount DESC

@@ -18,35 +18,66 @@ try:
 except ImportError:
     alt = None
 
+# Import calendar utilities from centralized module
+from calendar_utils import (
+    MONTH_ORDER,
+    MONTH_LOOKUP,
+    month_number,
+    format_month_label,
+)
+
 LOGGER = logging.getLogger(__name__)
 
-# Month lookup utilities
-MONTH_ORDER = [calendar.month_name[i] for i in range(1, 13)]
-MONTH_LOOKUP = {
-    name.lower(): idx for idx, name in enumerate(MONTH_ORDER, start=1)
-    if name
-} | {calendar.month_abbr[idx].lower(): idx for idx in range(1, 13)}
+
+def format_currency(value: float, decimals: int = 2) -> str:
+    """Format a number as currency with commas and dollar sign."""
+    if value is None:
+        return "$0.00"
+    return f"${value:,.{decimals}f}"
 
 
-def month_number(val) -> int | None:
-    """Parse a month value from number/name/abbr strings into 1-12."""
-    if val is None:
+def render_kpi_card(title: str, value: str, delta: str = None, delta_color: str = "normal") -> None:
+    """Render a styled KPI card using Streamlit metrics."""
+    st.metric(label=title, value=value, delta=delta, delta_color=delta_color)
+
+
+def render_trend_line(data: pd.DataFrame, x_col: str, y_col: str, title: str = "") -> None:
+    """Render a simple trend line chart."""
+    if data is None or data.empty:
+        st.caption("No data available")
+        return
+    
+    if alt:
+        chart = alt.Chart(data).mark_line(strokeWidth=2).encode(
+            x=alt.X(x_col, title=x_col),
+            y=alt.Y(y_col, title=y_col),
+            tooltip=[x_col, y_col]
+        ).properties(title=title).interactive()
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.line_chart(data.set_index(x_col)[y_col])
+
+
+def render_dataframe_with_selection(df: pd.DataFrame, key: str = "df_select") -> pd.DataFrame | None:
+    """Render a dataframe with row selection capability."""
+    if df is None or df.empty:
+        st.caption("No data to display")
         return None
-    if isinstance(val, int):
-        return val if 1 <= val <= 12 else None
-    s = str(val).strip().lower()
-    if s.isdigit():
-        num = int(s)
-        return num if 1 <= num <= 12 else None
-    return MONTH_LOOKUP.get(s)
-
-
-def format_month_label(val) -> str:
-    """Return a human-friendly month label, falling back to the raw value."""
-    num = month_number(val)
-    if num is not None:
-        return calendar.month_name[num]
-    return str(val)
+    
+    # Use Streamlit's native dataframe with selection
+    event = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=key
+    )
+    
+    if event.selection and event.selection.rows:
+        selected_idx = event.selection.rows[0]
+        return df.iloc[[selected_idx]]
+    return None
 
 
 def match_column(df: pd.DataFrame, name: str | None) -> str | None:
@@ -73,20 +104,40 @@ def dense_month_series(
     if df.empty:
         return df
     
-    df = df.copy()
-    df["_month_num"] = df[month_col].apply(month_number)
-    df = df.dropna(subset=["_month_num"])
-    df["_month_num"] = df["_month_num"].astype(int)
+    working = df.copy()
+    working[value_col] = pd.to_numeric(working[value_col], errors="coerce")
+    working["__month_num"] = working[month_col].apply(month_number)
+    
+    # If any months can't be parsed, just format existing data and return
+    if working["__month_num"].isna().any():
+        working[month_col] = working[month_col].apply(format_month_label)
+        return working.drop(columns="__month_num")
     
     # Sum values per month
-    grouped = df.groupby("_month_num")[value_col].sum().reset_index()
+    aggregated = working.groupby("__month_num", as_index=False)[value_col].sum()
     
-    # Fill missing months
-    all_months = pd.DataFrame({"_month_num": range(1, 13)})
-    merged = all_months.merge(grouped, on="_month_num", how="left").fillna(0)
-    merged[month_col] = merged["_month_num"].apply(lambda m: calendar.month_name[m])
+    # Fill missing months with zeros
+    full = pd.DataFrame({"__month_num": range(1, 13)})
+    dense = full.merge(aggregated, on="__month_num", how="left").fillna({value_col: 0})
+    dense[month_col] = dense["__month_num"].apply(lambda m: calendar.month_name[m])
     
-    return merged[[month_col, value_col]]
+    # Preserve static columns that have a single unique value
+    static_cols = [c for c in working.columns if c not in {month_col, value_col, "__month_num"}]
+    for col in static_cols:
+        uniques = working[col].dropna().unique()
+        if len(uniques) == 1:
+            dense[col] = uniques[0]
+    
+    # Add year column if hinted and not already present
+    if year_hint and "Year" not in dense.columns:
+        dense.insert(0, "Year", year_hint)
+    
+    # Sort by proper month order
+    dense[month_col] = pd.Categorical(dense[month_col], categories=MONTH_ORDER, ordered=True)
+    dense = dense.sort_values(month_col)
+    dense[month_col] = dense[month_col].astype(str)
+    
+    return dense.drop(columns="__month_num")
 
 
 def prepare_display_df(
@@ -192,3 +243,130 @@ def add_margin_metrics(df: pd.DataFrame) -> pd.DataFrame:
         )
     
     return df
+
+
+def render_pulse_header(user_id: str = "default") -> None:
+    """
+    Render the system 'Pulse' header - a unifying heartbeat for the app.
+    Shows System Status, Brain Health, Market Mood, and Time.
+    
+    Brain Health is now REAL - it reflects how well the system knows the user.
+    """
+    import datetime
+    import random
+    
+    # Get REAL brain health
+    try:
+        from user_brain import get_brain
+        brain = get_brain(user_id)
+        confidence_score = brain.get_brain_health()
+    except Exception:
+        confidence_score = 0.10  # Fallback
+    
+    # Generate dynamic vibe
+    vibes = [
+        "🐻 Bearish but hopeful", "🐂 Bullish momentum detected", 
+        "🦀 Sideways drift", "⚡ High volatility alert",
+        "🧘 Zen status: Accumulating", "🧠 Deep learning active",
+        "🤖 AI Reasoning: Optimal", "🌊 Liquidity pools: Deep"
+    ]
+    # In a real app, this would be derived from market_insights.get_market_regime()
+    # For now, we simulate "Aliveness" with a consistent seed based on hour
+    random.seed(datetime.datetime.now().hour)
+    market_vibe = random.choice(vibes)
+    
+    # Time
+    now = datetime.datetime.now().strftime("%H:%M EST")
+    
+    # CSS for the Pulse Bar
+    st.markdown("""
+    <style>
+    .pulse-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #002b36; /* Solarized Base03 */
+        border-bottom: 2px solid #2aa198; /* Cyan accent */
+        padding: 10px 20px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        font-family: 'Inconsolata', monospace;
+        color: #839496; /* Base0 */
+    }
+    .pulse-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .pulse-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #586e75; /* Base01 */
+    }
+    .pulse-value {
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: #fdf6e3; /* Base3 */
+    }
+    .pulse-value.health { color: #859900; } /* Green */
+    .pulse-value.time { color: #268bd2; } /* Blue */
+    .pulse-value.vibe { color: #b58900; } /* Yellow */
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="pulse-container">
+        <div class="pulse-item">
+            <span class="pulse-label">System Status</span>
+            <span class="pulse-value health">● ONLINE</span>
+        </div>
+        <div class="pulse-item">
+            <span class="pulse-label">Brain Health</span>
+            <span class="pulse-value">{confidence_score*100:.0f}%</span>
+        </div>
+        <div class="pulse-item">
+            <span class="pulse-label">Market Vibe</span>
+            <span class="pulse-value vibe">{market_vibe}</span>
+        </div>
+        <div class="pulse-item">
+            <span class="pulse-label">System Time</span>
+            <span class="pulse-value time">{now}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# DIGITAL BODY LANGUAGE SENSORS 👁️
+# =============================================================================
+
+def init_decision_timer():
+    """Start the clock for this page view."""
+    import time
+    if "decision_start_time" not in st.session_state:
+        st.session_state.decision_start_time = time.time()
+
+def render_sensor_button(label: str, key: str, context: str, item: str = None) -> bool:
+    """
+    A button that tracks how long it took you to click it.
+    Returns True if clicked.
+    """
+    import time
+    from user_brain import get_brain
+    
+    clicked = st.button(label, key=key)
+    
+    if clicked:
+        start_time = st.session_state.get("decision_start_time", time.time())
+        elapsed = time.time() - start_time
+        
+        # Log the "Digital Body Language"
+        user_id = st.session_state.get("user", "default")
+        brain = get_brain(user_id)
+        brain.log_decision(context=context, seconds=elapsed, item=item)
+        
+        # Reset timer for next action
+        st.session_state.decision_start_time = time.time()
+        
+    return clicked

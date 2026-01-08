@@ -6,6 +6,7 @@ from decimal import Decimal
 
 import requests
 
+from calendar_utils import MONTH_LOOKUP
 from constants import (
     BILL_OF_MATERIALS_UI_REFERENCE,
     CUSTOM_SQL_ALLOWED_TABLES,
@@ -236,7 +237,7 @@ def is_erp_intent(prompt: str, context: dict | None = None) -> bool:
         "dynamics", "gp", "great plains", "cost", "usage", "consume", "consumption",
         "sop", "pop", "iv", "gl", "variance", "forecast"
     )
-    month_tokens = [m.lower() for m in calendar.month_name if m]
+    month_tokens = list(MONTH_LOOKUP.keys())  # Use centralized month lookup
 
     if any(tok in text for tok in erp_tokens):
         return True

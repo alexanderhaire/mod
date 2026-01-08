@@ -4,6 +4,8 @@ import re
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 
+from calendar_utils import MONTH_LOOKUP
+
 
 def normalize_item_for_bom(item: str) -> str:
     """Map finished goods to their BOM parent by converting trailing digits to '00'."""
@@ -38,25 +40,10 @@ def parse_month_year_from_prompt(
     """
     prompt_lower = prompt.lower()
     
-    # robust month map including common typos
-    month_map = {
-        "january": 1, "jan": 1,
-        "february": 2, "feb": 2, "febuary": 2,
-        "march": 3, "mar": 3,
-        "april": 4, "apr": 4,
-        "may": 5,
-        "june": 6, "jun": 6,
-        "july": 7, "jul": 7,
-        "august": 8, "aug": 8,
-        "september": 9, "sep": 9, "sept": 9,
-        "october": 10, "oct": 10,
-        "november": 11, "nov": 11,
-        "december": 12, "dec": 12
-    }
-    
+    # Use centralized month lookup from calendar_utils
     month = None
     # Check for full names first to avoid partial matches on abbr
-    for name, idx in month_map.items():
+    for name, idx in MONTH_LOOKUP.items():
         # Use simple word boundary check if needed, but 'in' is often enough for simple tokens
         if name in prompt_lower:
             month = idx

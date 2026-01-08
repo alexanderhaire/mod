@@ -63,13 +63,19 @@ from portfolio_manager import PortfolioManager
 from auto_trader import AutoTrader
 from pages.quant_dashboard import render_quant_dashboard
 from ui_utils import (
-    month_number as _month_number,
-    format_month_label as _format_month_label,
+    format_currency, render_kpi_card, render_trend_line, render_dataframe_with_selection,
+    add_margin_metrics, render_pulse_header,
+    init_decision_timer, render_sensor_button,
     match_column as _match_column,
     dense_month_series as _dense_month_series,
     render_chart as _render_chart,
     latest_question_answer as _latest_question_answer,
     add_margin_metrics as _add_margin_metrics,
+)
+from calendar_utils import (
+    MONTH_ORDER,
+    month_number as _month_number,
+    format_month_label as _format_month_label
 )
 import fifo_tracker
 from wizard_ui import WizardFlow
@@ -97,6 +103,7 @@ from dynamic_handler import (
 )
 from router import handle_question
 from secrets_loader import build_connection_string
+from db_pool import get_connection as get_pooled_connection
 from training_logger import record_sql_example_from_response, record_training_event
 from hotkey_utils import inject_hotkeys
 
@@ -157,6 +164,11 @@ def _ensure_new_chat(name: str | None = None) -> dict:
 st.sidebar.caption("System v1.5.1 [ML Logic Active]")
 
 st.sidebar.divider()
+try:
+    st.sidebar.page_link("pages/brain_center.py", label="🧠 Brain Center", icon="❤️")
+except AttributeError:
+    # Fallback for older Streamlit versions
+    st.sidebar.markdown("[🧠 Brain Center](/brain_center)")
 st.sidebar.markdown("### ⚡ Execution Mode")
 mode_select = st.sidebar.selectbox(
     "Trading Environment",
@@ -367,23 +379,22 @@ def _ensure_auth_state() -> None:
 def verify_vendor_identity(user_input):
     """Check if the input matches a valid Vendor ID or Name in PM00200."""
     try:
-        conn_str, _, _, _ = build_connection_string()
-        conn = pyodbc.connect(conn_str)
-        cursor = conn.cursor()
-        
-        # Check ID match first
-        cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDORID = ?", user_input)
-        row = cursor.fetchone()
-        if row:
-            return True, row.VENDORID.strip(), row.VENDNAME.strip()
+        with get_pooled_connection() as conn:
+            cursor = conn.cursor()
             
-        # Check Name match (fuzzy or exact)
-        cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDNAME LIKE ?", f"%{user_input}%")
-        row = cursor.fetchone()
-        if row:
-            return True, row.VENDORID.strip(), row.VENDNAME.strip()
-            
-        return False, None, None
+            # Check ID match first
+            cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDORID = ?", user_input)
+            row = cursor.fetchone()
+            if row:
+                return True, row.VENDORID.strip(), row.VENDNAME.strip()
+                
+            # Check Name match (fuzzy or exact)
+            cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDNAME LIKE ?", f"%{user_input}%")
+            row = cursor.fetchone()
+            if row:
+                return True, row.VENDORID.strip(), row.VENDNAME.strip()
+                
+            return False, None, None
     except Exception as e:
         LOGGER.error(f"Vendor verification failed: {e}")
         return False, None, None
@@ -506,22 +517,21 @@ def _render_auth_gate() -> None:
             st.caption("Select your company to automatically verified access. If new, select 'New Entity'.")
             
             # Fetch active vendors/brokers for dropdown
-            conn_str, _, _, _ = build_connection_string()
             try:
-                conn = pyodbc.connect(conn_str)
-                cursor = conn.cursor()
-                # Fetch Name and ID
-                cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDSTTS = 1 ORDER BY VENDNAME")
-                rows = cursor.fetchall()
-                company_map = {f"{r.VENDNAME.strip()} ({r.VENDORID.strip()})": r.VENDORID.strip() for r in rows}
-                
-                # Add "New" option
-                options = ["(New Entity / Not Listed)"] + list(company_map.keys())
-                selection = st.selectbox("Select Your Company", options)
-                
-                if selection != "(New Entity / Not Listed)":
-                    linked_identity_id = company_map[selection]
-                    st.success(f"Account will be linked to: {linked_identity_id}")
+                with get_pooled_connection() as conn:
+                    cursor = conn.cursor()
+                    # Fetch Name and ID
+                    cursor.execute("SELECT VENDORID, VENDNAME FROM PM00200 WHERE VENDSTTS = 1 ORDER BY VENDNAME")
+                    rows = cursor.fetchall()
+                    company_map = {f"{r.VENDNAME.strip()} ({r.VENDORID.strip()})": r.VENDORID.strip() for r in rows}
+                    
+                    # Add "New" option
+                    options = ["(New Entity / Not Listed)"] + list(company_map.keys())
+                    selection = st.selectbox("Select Your Company", options)
+                    
+                    if selection != "(New Entity / Not Listed)":
+                        linked_identity_id = company_map[selection]
+                        st.success(f"Account will be linked to: {linked_identity_id}")
             except Exception as e:
                 st.warning("Could not load company list. Proceeding as new entity.")
 
@@ -689,44 +699,12 @@ def _match_column(df: pd.DataFrame, name: str | None) -> str | None:
 
 # render_quant_dashboard is now imported from pages.quant_dashboard
 
-
-
-MONTH_ORDER = [calendar.month_name[i] for i in range(1, 13)]
-MONTH_LOOKUP = {
-    name.lower(): idx for idx, name in enumerate(MONTH_ORDER, start=1)
-    if name
-} | {calendar.month_abbr[idx].lower(): idx for idx in range(1, 13)}
+# Calendar utilities (MONTH_ORDER, _month_number, _format_month_label, _dense_month_series)
+# are now imported from ui_utils above.
 
 CLIPBOARD_PASTE_COMPONENT = components.declare_component(
     "feedback_paste_zone", path=str(Path(__file__).parent / "components" / "feedback_paste_zone")
 )
-
-
-def _month_number(val) -> int | None:
-    """Parse a month value from number/name/abbr strings into 1-12."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return None
-    if isinstance(val, (int, float)) and not isinstance(val, bool):
-        maybe = int(val)
-        return maybe if 1 <= maybe <= 12 else None
-    if isinstance(val, str):
-        cleaned = val.strip()
-        if not cleaned:
-            return None
-        if cleaned.isdigit():
-            maybe = int(cleaned)
-            return maybe if 1 <= maybe <= 12 else None
-        lower = cleaned.lower()
-        return MONTH_LOOKUP.get(lower)
-    return None
-
-
-def _format_month_label(val) -> str:
-    """Return a human-friendly month label, falling back to the raw value."""
-    month_num = _month_number(val)
-    if month_num:
-        return calendar.month_name[month_num]
-    return str(val)
 
 
 def _get_market_segment(row: pd.Series) -> str:
@@ -736,41 +714,6 @@ def _get_market_segment(row: pd.Series) -> str:
     """
     itm_class = str(row.get('ITMCLSCD', '') or '')
     return classify_item_segment(itm_class)
-
-
-
-def _dense_month_series(df: pd.DataFrame, month_col: str, value_col: str, year_hint: int | None = None) -> pd.DataFrame:
-    """
-    Ensure the month/value columns are fully populated for a calendar year with zeros for missing months.
-    Preserves a consistent month order for charts and tables.
-    """
-    working = df.copy()
-    working[value_col] = pd.to_numeric(working[value_col], errors="coerce")
-    working["__month_num"] = working[month_col].apply(_month_number)
-
-    if working["__month_num"].isna().any():
-        working[month_col] = working[month_col].apply(_format_month_label)
-        return working.drop(columns="__month_num")
-
-    aggregated = working.groupby("__month_num", as_index=False)[value_col].sum()
-    full = pd.DataFrame({"__month_num": range(1, 13)})
-    dense = full.merge(aggregated, on="__month_num", how="left").fillna({value_col: 0})
-
-    dense[month_col] = dense["__month_num"].apply(lambda m: calendar.month_name[m])
-
-    static_cols = [c for c in working.columns if c not in {month_col, value_col, "__month_num"}]
-    for col in static_cols:
-        uniques = working[col].dropna().unique()
-        if len(uniques) == 1:
-            dense[col] = uniques[0]
-
-    if year_hint and "Year" not in dense.columns:
-        dense.insert(0, "Year", year_hint)
-
-    dense[month_col] = pd.Categorical(dense[month_col], categories=MONTH_ORDER, ordered=True)
-    dense = dense.sort_values(month_col)
-    dense[month_col] = dense[month_col].astype(str)
-    return dense.drop(columns="__month_num")
 
 
 def _prepare_display_df(df: pd.DataFrame, chart_spec: dict | None, entities: dict | None) -> pd.DataFrame:
@@ -1146,11 +1089,13 @@ if "buy_calendar_cache" not in st.session_state:
     st.session_state.buy_calendar_cache = {}
 
 # --- MAIN DASHBOARD (MARKET MONITOR) ---
-conn_str, server, db, auth = build_connection_string()
+# Using connection pool for efficient connection reuse
 try:
-
-    with pyodbc.connect(conn_str, autocommit=True) as conn:
+    with get_pooled_connection() as conn:
         cursor = conn.cursor()
+        
+        # --- DIGITAL SENSORS ---
+        init_decision_timer()
         
         # Vendor Portal Redirection (Now with access to cursor)
         if st.session_state.get("is_vendor"):
@@ -1164,6 +1109,19 @@ try:
         
         # Fetch market data (needed for both pages)
         df_market = _add_margin_metrics(_fetch_market_data(cursor))
+
+        # --- INITIALIZE BRAIN ---
+        # Get or create the learning brain for this user
+        from user_brain import get_brain
+        current_user = st.session_state.get("user", "default")
+        brain = get_brain(current_user)
+        
+        # Log page view
+        brain.log_event("page_view", {"page": st.session_state.get("current_page", "market_overview")})
+
+        # --- PULSE HEADER ---
+        # Show the "Heartbeat" of the system with REAL brain health
+        render_pulse_header(user_id=current_user)
         
         # === PAGE ROUTING ===
         # GENERATIVE INSIGHTS PAGE
@@ -1569,7 +1527,7 @@ try:
                                     st.dataframe(
                                         df_vendors.style.format({"Amount": "${:,.0f}"}),
                                         hide_index=True,
-                                        use_container_width=True
+                                        width="stretch"
                                     )
                             else:
                                 st.info("No open POs with upcoming due dates found.")
@@ -1617,7 +1575,7 @@ try:
                                             "AnnualCashFlowImpact": "${:,.0f}"
                                         }),
                                         hide_index=True,
-                                        use_container_width=True
+                                        width="stretch"
                                     )
                             else:
                                 st.info("No vendor payment terms data available.")
@@ -1660,7 +1618,7 @@ try:
                                             "YoYChange": "{:+.1f}%"
                                         }),
                                         hide_index=True,
-                                        use_container_width=True
+                                        width="stretch"
                                     )
                             else:
                                 st.info("No spend history available.")
@@ -2471,7 +2429,7 @@ try:
                                     r1, r2, r3, r4 = st.columns([2, 3, 1, 1])
                                     
                                     with r1:
-                                        if st.button(f"🔗 {item_num}", key=f"list_btn_{idx}_{item_num}"):
+                                        if render_sensor_button(f"🔗 {item_num}", key=f"list_btn_{idx}_{item_num}", context="inventory_list_select", item=item_num):
                                             st.session_state.selected_product = item_num
                                             st.session_state.current_page = "product_insights"
                                             st.rerun()
@@ -2638,6 +2596,9 @@ try:
         elif st.session_state.current_page == "product_insights" and st.session_state.selected_product:
             product_item = st.session_state.selected_product
             
+            # --- BRAIN: Log product view ---
+            brain.log_event("product_view", {"item": product_item})
+            
             # Fetch Data
             details = get_product_details(cursor, product_item)
             item_desc = details.get('item_desc', '') if details else ''
@@ -2647,7 +2608,14 @@ try:
             with header_col1:
                 st.markdown(f"# 🎯 MARKET_INTELLIGENCE: `{product_item}`")
                 if item_desc:
-                    st.markdown(f"### {item_desc}") 
+                    st.markdown(f"### {item_desc}")
+                # Display weight per gallon if available
+                inventory = details.get('inventory_status', {}) if details else {}
+                weight_raw = float(inventory.get('ITEMSHWT', 0) or 0)
+                # GP stores weight with 2 implied decimal places
+                weight_per_gallon = weight_raw / 100.0 if weight_raw > 0 else 0
+                if weight_per_gallon > 0:
+                    st.markdown(f"**Weight/Gallon:** {weight_per_gallon:.2f} lbs")
             with header_col2:
                 if st.button("← BACK", key="back_to_overview"):
                     st.session_state.current_page = "market_overview"
@@ -2843,16 +2811,41 @@ try:
                     st.markdown(f"**Inventory Value:** ${inv_value:,.2f}")
 
                 with kpi7:
-                    hedge_placeholder = st.empty()
-                    with hedge_placeholder.container():
+                    # Calculate on the fly now
+                    try:
+                        hedge_data = market_insights.calculate_optimal_hedge_ratio(
+                            price_history, # Raw material history
+                            ag_data.get('data', []) # Futures history
+                        )
+                        ratio = hedge_data.get('optimal_hedge_ratio', 0.0)
+                        
+                        st.markdown("### OPTIMAL HEDGE RATIO")
+                        if ratio > 0:
+                            st.markdown(f"## {ratio:.0%}")
+                            st.caption(f"Suggestion: Hedge {ratio:.0%} of volume")
+                        else:
+                            st.markdown("## N/A")
+                            st.caption("No suitable hedge found")
+                    except Exception as e:
+                         # Graceful fallback
                          st.markdown("### OPTIMAL HEDGE RATIO")
-                         st.caption("⏳ Analyzing correlations...")
+                         st.markdown("## --")
+                         st.caption("Data insufficient")
 
                 with kpi8:
-                    gap_placeholder = st.empty()
-                    with gap_placeholder.container():
-                         st.markdown("### SHARPE GAP")
-                         st.caption("⏳ ...")
+                    try:
+                        gap = hedge_data.get('sharpe_improvement', 0.0) if 'hedge_data' in locals() else 0.0
+                        st.markdown("### SHARPE GAP")
+                        if gap > 0:
+                            st.markdown(f"## +{gap:.2f}")
+                            st.caption("Efficiency gain from hedging")
+                        else:
+                            st.markdown("## 0.00")
+                            st.caption("Market is efficient")
+                    except Exception:
+                        st.markdown("### SHARPE GAP")
+                        st.markdown("## --")
+                        st.caption("Data insufficient")
 
                 st.markdown("---")
 
@@ -3665,6 +3658,9 @@ try:
             
             # Chat Input
             if prompt := st.chat_input("QUERY INTELLIGENCE UNIT..."):
+                # --- BRAIN: Log chat question ---
+                brain.log_event("chat_question", {"query": prompt[:100]})  # First 100 chars
+                
                 active_chat["messages"].append({"role": "user", "content": prompt})
                 with chat_container:
                     st.chat_message("user").markdown(prompt)
@@ -3708,6 +3704,15 @@ try:
 
             # Feedback Form
             _render_feedback_form(active_chat["id"], active_chat["messages"])
+
+    # --- FOOTER ---
+    st.markdown("---")
+    st.markdown(
+        "<div style='text-align: right; color: #586e75; font-size: 0.8rem; padding: 10px;'>"
+        "Made with ❤️ in Plant City"
+        "</div>",
+        unsafe_allow_html=True
+    )
 
 except Exception as e:
     st.error(f"SYSTEM FAILURE: {e}")

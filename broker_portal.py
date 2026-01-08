@@ -56,8 +56,11 @@ def get_priority_item_set(cursor):
         st.warning(f"Could not fetch demand signals: {e}")
         return {}
 
-def save_freight_quote(broker_id, vendor_quote_id, vendor_quote_summary, freight_price, valid_until, notes, equipment_type="Unknown"):
+def save_freight_quote(broker_id, vendor_quote_id, vendor_quote_summary, freight_price, valid_until, notes, equipment_type="Unknown", submitted_at=None):
     """Save the broker's freight quote."""
+    if submitted_at is None:
+        submitted_at = datetime.datetime.now()
+        
     record = {
         "broker_id": broker_id,
         "vendor_quote_id": vendor_quote_id,
@@ -66,7 +69,7 @@ def save_freight_quote(broker_id, vendor_quote_id, vendor_quote_summary, freight
         "valid_until": valid_until.isoformat() if valid_until else None,
         "notes": notes,
         "equipment_type": equipment_type,
-        "submitted_at": datetime.datetime.now().isoformat()
+        "submitted_at": submitted_at.isoformat() if isinstance(submitted_at, (datetime.datetime, datetime.date)) else str(submitted_at)
     }
     
     with open(BROKER_QUOTES_FILE, "a") as f:

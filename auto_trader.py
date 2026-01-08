@@ -177,7 +177,6 @@ class AutoTrader:
             # Save Brain after "Learning" (Trading)
             # In a real loop, we would call self.alpha_engine.models[asset].update(...) here
             self.save_brain()
-            self.save_brain()
                 
             return {
                 "status": "rebalancing",

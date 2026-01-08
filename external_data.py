@@ -183,7 +183,7 @@ def fetch_agricultural_market_data(commodity: str, timeframe: str = "6m") -> Dic
             "data": []
         }
 
-def fetch_market_data_pool(commodities: List[str], _progress_callback=None) -> Dict[str, Dict[str, Any]]:
+def fetch_market_data_pool(commodities: List[str], timeframe: str = "2y", _progress_callback=None) -> Dict[str, Dict[str, Any]]:
     """
     Batch fetch data for multiple commodities using yfinance batch download.
     This is significantly faster and more robust than looping.
@@ -212,10 +212,18 @@ def fetch_market_data_pool(commodities: List[str], _progress_callback=None) -> D
     if not valid_tickers:
         return {}
 
-    # 2. Batch Download (2y history)
+    # 2. Batch Download
     try:
+        # Map timeframe to yfinance period
+        period = "2y"
+        if timeframe == "1y": period = "1y"
+        elif timeframe == "5y": period = "5y"
+        elif timeframe == "1mo": period = "1mo"
+        elif timeframe == "6m": period = "6mo"
+        elif timeframe == "3mo": period = "3mo"
+
         # group_by='ticker' ensures we get a MultiIndex with Ticker at level 0
-        batch_df = yf.download(valid_tickers, period="2y", group_by='ticker', progress=False, timeout=20, threads=True)
+        batch_df = yf.download(valid_tickers, period=period, group_by='ticker', progress=False, timeout=20, threads=True)
     except Exception as e:
         LOGGER.error(f"Batch download failed: {e}")
         return {}

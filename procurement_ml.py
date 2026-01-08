@@ -69,8 +69,17 @@ class ProcurementFeatures:
     
     # Vendor/Credit features
     vendor_payment_days: int = 30
+    vendor_last_volume: float = 0.0
+    days_since_last_buy: int = 999
+    vendor_name: str = ""
+    vendor_reliability_score: float = 1.0
     vendor_reliability_score: float = 1.0
     credit_cost_factor: float = 0.0  # Working capital cost
+    vendor_reliability_score: float = 1.0
+    credit_cost_factor: float = 0.0  # Working capital cost
+    planning_lead_time: int = 14  # Days to receive goods
+    actual_lead_time: int = 0 # Historical average lead time
+    qty_on_order: float = 0.0 # Quantity currently on order
     
     def to_array(self) -> np.ndarray:
         """Convert to numpy array for model input."""
@@ -185,14 +194,15 @@ class ProcurementFeatureBuilder:
             SELECT 
                 h.RECEIPTDATE AS TransactionDate,
                 l.UNITCOST AS UnitCost,
-                l.ACTLSHIP AS Quantity,
+                l.EXTDCOST,
+                CASE WHEN l.UNITCOST > 0 THEN l.EXTDCOST / l.UNITCOST ELSE 0 END AS Quantity,
                 h.VENDORID
             FROM POP30300 h
             JOIN POP30310 l ON h.POPRCTNM = l.POPRCTNM
             WHERE l.ITEMNMBR = ?
               AND h.RECEIPTDATE >= DATEADD(year, -2, ?)
               AND h.RECEIPTDATE <= ?
-              AND l.ACTLSHIP > 0
+              AND l.EXTDCOST > 0
             ORDER BY h.RECEIPTDATE
             """
             self.cursor.execute(query, (item_number, as_of_date, as_of_date))
@@ -230,6 +240,7 @@ class ProcurementFeatureBuilder:
                 ABS(TRXQTY) AS Quantity
             FROM IV30300
             WHERE ITEMNMBR = ?
+              AND TRXLOCTN = 'MAIN'  -- Filter by main location
               AND DOCTYPE IN (1, 5)  -- Sales, Adjustments (out)
               AND DOCDATE >= DATEADD(year, -1, ?)
               AND DOCDATE <= ?
@@ -263,7 +274,33 @@ class ProcurementFeatureBuilder:
                 v.VENDORID,
                 v.VENDNAME,
                 v.PYMTRMID,
-                COALESCE(t.DUEDTDS, 30) AS PaymentDays
+                COALESCE(t.DUEDTDS, 30) AS PaymentDays,
+                iv.PLANNINGLEADTIME,
+                (
+                    SELECT TOP 1 l.EXTDCOST / NULLIF(l.UNITCOST, 0)
+                    FROM POP30310 l
+                    JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+                    WHERE l.ITEMNMBR = iv.ITEMNMBR AND h.VENDORID = iv.VENDORID
+                    ORDER BY h.RECEIPTDATE DESC
+                ) AS LastVolume,
+                (
+                    SELECT AVG(DATEDIFF(day, po.DOCDATE, h.RECEIPTDATE))
+                    FROM POP30310 l
+                    JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+                    JOIN POP30100 po ON l.PONUMBER = po.PONUMBER
+                    WHERE l.ITEMNMBR = iv.ITEMNMBR 
+                      AND h.VENDORID = iv.VENDORID 
+                      AND h.RECEIPTDATE > DATEADD(year, -2, GETDATE())
+                      AND l.PONUMBER <> ''
+                      AND h.RECEIPTDATE >= po.DOCDATE
+                ) AS AvgGapDays,
+                (
+                    SELECT TOP 1 h.RECEIPTDATE
+                    FROM POP30310 l
+                    JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+                    WHERE l.ITEMNMBR = iv.ITEMNMBR AND h.VENDORID = iv.VENDORID
+                    ORDER BY h.RECEIPTDATE DESC
+                ) AS LastDate
             FROM IV00103 iv  -- Item Vendor Master
             JOIN PM00200 v ON iv.VENDORID = v.VENDORID
             LEFT JOIN SY03300 t ON v.PYMTRMID = t.PYMTRMID
@@ -278,6 +315,10 @@ class ProcurementFeatureBuilder:
                     'vendor_id': row.VENDORID.strip() if row.VENDORID else '',
                     'vendor_name': row.VENDNAME.strip() if row.VENDNAME else '',
                     'payment_days': int(row.PaymentDays) if row.PaymentDays else 30,
+                    'lead_time': int(row.PLANNINGLEADTIME) if row.PLANNINGLEADTIME else 14,
+                    'actual_lead_time': int(row.AvgGapDays) if row.AvgGapDays else 0,
+                    'last_volume': float(row.LastVolume) if row.LastVolume else 0.0,
+                    'last_date': row.LastDate,  # Date object
                 }
             return None
             
@@ -290,11 +331,13 @@ class ProcurementFeatureBuilder:
         try:
             query = """
             SELECT 
-                SUM(QTYONHND) AS OnHand,
-                SUM(QTYONORD) AS OnOrder,
-                MAX(ORDERPNT) AS ReorderPoint
+                QTYONHND AS OnHand,
+                QTYONORD AS OnOrder,
+                ORDRPNTQTY AS ReorderPoint
             FROM IV00102
             WHERE ITEMNMBR = ?
+              AND LOCNCODE = 'MAIN'  -- Specific to main location
+
             """
             self.cursor.execute(query, (item_number,))
             row = self.cursor.fetchone()
@@ -415,6 +458,22 @@ class ProcurementFeatureBuilder:
     ) -> ProcurementFeatures:
         """Compute vendor-related features."""
         features.vendor_payment_days = vendor_info.get('payment_days', 30)
+        features.planning_lead_time = vendor_info.get('lead_time', 14)
+        if features.planning_lead_time == 0:
+            features.planning_lead_time = 14  # Default if 0 in DB
+        
+        features.actual_lead_time = vendor_info.get('actual_lead_time', 0)
+        
+        # Last purchase volume and recency
+        features.vendor_last_volume = vendor_info.get('last_volume', 0.0)
+        features.vendor_name = vendor_info.get('vendor_name', '')
+        
+        last_date = vendor_info.get('last_date')
+        if last_date:
+            if isinstance(last_date, datetime.datetime):
+                last_date = last_date.date()
+            delta = (features.feature_date - last_date).days
+            features.days_since_last_buy = max(0, delta)
         
         # Credit cost factor: opportunity cost of payment terms
         # Net 30 = baseline (0), longer terms = negative cost (good)
@@ -435,6 +494,7 @@ class ProcurementFeatureBuilder:
         """Compute inventory-related features."""
         on_hand = inv_status.get('on_hand', 0)
         reorder_point = inv_status.get('reorder_point', 0)
+        features.qty_on_order = inv_status.get('on_order', 0.0)
         
         # Days of coverage
         if features.usage_30d_avg > 0:
@@ -718,15 +778,33 @@ class ProcurementMLOptimizer:
         features = self.feature_builder.build_features(item_number, as_of_date)
         prediction = self.predictor.predict(features)
         
+        # Calculate Must Buy Date
+        # Stockout = Today + Coverage
+        # Must Buy = Stockout - Lead Time - Safety (7 days)
+        analysis_dt = as_of_date or datetime.date.today()
+        days_coverage = features.days_of_coverage
+        
+        # Use Actual Lead Time if available and valid (>0), otherwise fallback to Planning
+        lead_time = features.actual_lead_time if features.actual_lead_time > 0 else features.planning_lead_time
+        
+        safety_buffer = 7
+        
+        days_until_order = days_coverage - lead_time - safety_buffer
+        must_buy_date = analysis_dt + datetime.timedelta(days=int(days_until_order))
+        
         return {
             "item_number": item_number,
-            "as_of_date": str(as_of_date or datetime.date.today()),
+            "as_of_date": str(analysis_dt),
+            "must_buy_date": str(must_buy_date),
             **prediction,
             "features": {
                 "current_price": features.current_price,
                 "price_52w_percentile": features.price_percentile_52w,
                 "days_of_coverage": features.days_of_coverage,
+                "lead_time": features.planning_lead_time,
                 "vendor_payment_days": features.vendor_payment_days,
+                "vendor_last_volume": features.vendor_last_volume,
+                "vendor_name": features.vendor_name,
             }
         }
     
@@ -782,7 +860,7 @@ class ProcurementMLOptimizer:
             FROM POP30300 h
             JOIN POP30310 l ON h.POPRCTNM = l.POPRCTNM
             WHERE h.RECEIPTDATE >= DATEADD(month, -{lookback_months}, GETDATE())
-              AND l.ACTLSHIP > 0
+              AND l.EXTDCOST > 0
             ORDER BY l.ITEMNMBR, h.RECEIPTDATE
             """
             self.cursor.execute(query)
@@ -841,7 +919,8 @@ class ProcurementMLOptimizer:
     
     def get_batch_recommendations(
         self, 
-        item_numbers: list[str]
+        item_numbers: list[str],
+        as_of_date: datetime.date | None = None
     ) -> pd.DataFrame:
         """
         Get recommendations for multiple items at once.
@@ -853,7 +932,7 @@ class ProcurementMLOptimizer:
         
         for item in item_numbers:
             try:
-                rec = self.get_buy_recommendation(item)
+                rec = self.get_buy_recommendation(item, as_of_date=as_of_date)
                 results.append({
                     'ItemNumber': item,
                     'BuyScore': rec['buy_score'],
@@ -861,6 +940,12 @@ class ProcurementMLOptimizer:
                     'Confidence': rec['confidence'],
                     'Price52wPct': rec['features']['price_52w_percentile'],
                     'DaysCoverage': rec['features']['days_of_coverage'],
+                    'CurrentPrice': rec['features'].get('current_price', 0.0),
+                    'MustBuyDate': rec['must_buy_date'],
+                    'LeadTime': rec['features'].get('lead_time', 14),
+                    'VendorName': rec['features'].get('vendor_name', ''),
+                    'VendorLastVol': rec['features'].get('vendor_last_volume', 0.0),
+                    'QtyOnOrder': rec['features'].get('qty_on_order', 0.0)
                 })
             except Exception as e:
                 LOGGER.warning(f"Error getting recommendation for {item}: {e}")
@@ -1019,11 +1104,11 @@ class WalkForwardValidator:
                 l.ITEMNMBR,
                 h.RECEIPTDATE,
                 l.UNITCOST,
-                l.ACTLSHIP
+                CASE WHEN l.UNITCOST > 0 THEN l.EXTDCOST / l.UNITCOST ELSE 0 END AS ACTLSHIP
             FROM POP30300 h
             JOIN POP30310 l ON h.POPRCTNM = l.POPRCTNM
             WHERE h.RECEIPTDATE >= DATEADD(month, -{months}, GETDATE())
-              AND l.ACTLSHIP > 0
+              AND l.EXTDCOST > 0
               AND l.UNITCOST > 0
             ORDER BY h.RECEIPTDATE
             """

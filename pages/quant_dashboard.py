@@ -9,7 +9,6 @@ import time
 from typing import Any
 
 import pandas as pd
-import pyodbc
 import streamlit as st
 
 try:
@@ -19,6 +18,7 @@ except ImportError:
 
 from auto_trader import AutoTrader
 from constants import FUTURES_UNIVERSE
+from db_pool import get_connection as get_pooled_connection
 from external_data import fetch_market_data_pool, TICKER_MAP
 from market_insights import (
     get_batch_price_history_for_optimization,
@@ -26,7 +26,6 @@ from market_insights import (
 )
 from ml_engine import PortfolioOptimizer, Backtester
 from portfolio_manager import PortfolioManager
-from secrets_loader import build_connection_string
 
 import logging
 LOGGER = logging.getLogger(__name__)
@@ -125,7 +124,7 @@ def render_quant_dashboard() -> None:
                 st.dataframe(holdings_df.sort_values("Value", ascending=False).style.format({
                     "Value": "${:,.2f}",
                     "Weight": "{:.1%}"
-                }), use_container_width=True)
+                }), width="stretch")
     
     if total_equity < 10:
         st.warning("⚠️ Portfolio is empty. Please Deposit Capital to begin trading.")
@@ -141,18 +140,16 @@ def render_quant_dashboard() -> None:
             futures_count = st.slider("Futures Universe Size", 10, len(FUTURES_UNIVERSE), 50)
             selected_futures = FUTURES_UNIVERSE[:futures_count]
 
-    # 2. Fetch Data
-    conn_str, _, _, _ = build_connection_string()
+    # 2. Fetch Data (using connection pool)
     try:
-        conn = pyodbc.connect(conn_str)
-        cursor = conn.cursor()
-        
         # Parallel Load Bar
         progress_bar = st.progress(0, text="Initializing Quant Data Channels...")
         
-        # Step A: ERP Data
+        # Step A: ERP Data (requires database connection)
         progress_bar.progress(0.1, text="Fetching ERP Batch Price History (QTYINVCD logic)...")
-        df_erp = get_batch_price_history_for_optimization(cursor, limit=erp_limit)
+        with get_pooled_connection() as conn:
+            cursor = conn.cursor()
+            df_erp = get_batch_price_history_for_optimization(cursor, limit=erp_limit)
         
         # Step B: Futures Data
         progress_bar.progress(0.4, text=f"Fetching Futures Universe ({len(selected_futures)} tickers)...")
@@ -386,7 +383,7 @@ def render_quant_dashboard() -> None:
                     })
             
             df_blue = pd.DataFrame(blueprint).sort_values("Weight", ascending=False)
-            st.dataframe(df_blue.style.format({"Weight": "{:.1%}", "Allocated Capital": "${:,.2f}"}), use_container_width=True)
+            st.dataframe(df_blue.style.format({"Weight": "{:.1%}", "Allocated Capital": "${:,.2f}"}), width="stretch")
             
             if st.button("🚀 SUBMIT TRADES TO BROKER/ERP"):
                 pm = PortfolioManager(mode=st.session_state.get("execution_mode", "paper"))

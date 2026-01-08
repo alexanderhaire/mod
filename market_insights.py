@@ -418,11 +418,12 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
             SUM(q.QTYONORD) as OnOrder,
             i.STNDCOST,
             i.CURRCOST,
+            i.ITEMSHWT,
             i.USCATVLS_1 as Category
         FROM IV00101 i
         LEFT JOIN IV00102 q ON i.ITEMNMBR = q.ITEMNMBR
         WHERE i.ITEMNMBR = ? AND q.LOCNCODE = ?
-        GROUP BY i.ITEMNMBR, i.ITEMDESC, i.STNDCOST, i.CURRCOST, i.USCATVLS_1
+        GROUP BY i.ITEMNMBR, i.ITEMDESC, i.STNDCOST, i.CURRCOST, i.ITEMSHWT, i.USCATVLS_1
         """
         
         cursor.execute(query, item_number, PRIMARY_LOCATION)
@@ -1572,7 +1573,7 @@ def validate_price_history_quality(
             if isinstance(date, str):
                 try:
                     date = datetime.datetime.strptime(date[:10], '%Y-%m-%d').date()
-                except:
+                except (ValueError, TypeError):
                     continue
             elif isinstance(date, datetime.datetime):
                 date = date.date()
@@ -2160,7 +2161,7 @@ def calculate_hedge_metrics(
             try:
                 corr = returns['Raw'].corr(returns['Fut'])
                 if np.isnan(corr): corr = 0.0
-            except:
+            except Exception:
                 corr = 0.0
         
         # Optimal Hedge Ratio (Minimum Variance)

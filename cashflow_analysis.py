@@ -21,6 +21,8 @@ LOGGER = logging.getLogger(__name__)
 PATTERNS_FILE = Path(__file__).parent / "data" / "payment_patterns.json"
 PREDICTIONS_FILE = Path(__file__).parent / "data" / "cashflow_predictions.json"
 
+from calendar_utils import get_week_start
+
 
 @dataclass
 class CashFlowError:
@@ -327,7 +329,7 @@ def get_cash_forecast_summary(cursor: pyodbc.Cursor, days_ahead: int = 90) -> di
             total += cost
             
             # Group by week
-            week_start = due_date - datetime.timedelta(days=due_date.weekday())
+            week_start = get_week_start(due_date)
             week_key = week_start.isoformat()
             weekly_totals[week_key] = weekly_totals.get(week_key, 0) + cost
             

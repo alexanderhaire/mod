@@ -1,0 +1,40 @@
+{
+  "1": {
+    "favorite_items": [
+      "NPK1602                        ",
+      "NPK0030                        ",
+      "NPKU32                         ",
+      "NPK0030CDI                     ",
+      "NO3CA                          ",
+      "MISCH2O2                       "
+    ],
+    "favorite_categories": [],
+    "favorite_vendors": [],
+    "search_patterns": [],
+    "active_hours": [
+      11,
+      12,
+      8,
+      14,
+      15,
+      16
+    ],
+    "prediction_hits": 0,
+    "prediction_attempts": 0,
+    "last_updated": "2026-01-08T14:51:10.842673",
+    "conversions": [],
+    "decision_patterns": {
+      "avg_decision_time": 113.40292143821716,
+      "fastest_decisions": [],
+      "slowest_decisions": [
+        "NPK0030CDI                     ",
+        "NPK1602                        ",
+        "NO3CA                          ",
+        "NPKU32                         "
+      ],
+      "chart_interactions": 0,
+      "interaction_style": "Analytical / Deliberate"
+    },
+    "love_level": 4
+  }
+}

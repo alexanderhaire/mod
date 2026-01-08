@@ -6,6 +6,14 @@ from pathlib import Path
 
 import pyodbc
 
+from calendar_utils import (
+    MONTH_LOOKUP,
+    format_month_end_date,
+    extract_months_from_prompt as _extract_months_from_prompt,
+    extract_year_from_prompt as _extract_year_from_prompt,
+    extract_month_year_pairs as _extract_month_year_pairs,
+)
+
 from bom_guidance import build_bom_guidance
 from constants import CUSTOM_SQL_ALLOWED_TABLES, CUSTOM_SQL_MAX_ROWS, LOGGER, PRIMARY_LOCATION, SCHEMA_PRIORITY_COLUMNS
 from context_utils import summarize_sql_context
@@ -55,33 +63,8 @@ def _log_sql_result(label: str, sql_preview: str | None, rows: list | None, trun
     LOGGER.info("SQL %s returned %s row(s)%s | %s", name, row_count, " (truncated)" if truncated else "", preview or "<no preview>")
 
 
-_MONTH_MAP = {
-    "january": 1,
-    "jan": 1,
-    "february": 2,
-    "febuary": 2,
-    "feb": 2,
-    "march": 3,
-    "mar": 3,
-    "april": 4,
-    "apr": 4,
-    "may": 5,
-    "june": 6,
-    "jun": 6,
-    "july": 7,
-    "jul": 7,
-    "august": 8,
-    "aug": 8,
-    "september": 9,
-    "sept": 9,
-    "sep": 9,
-    "october": 10,
-    "oct": 10,
-    "november": 11,
-    "nov": 11,
-    "december": 12,
-    "dec": 12,
-}
+# _MONTH_MAP, _extract_months_from_prompt, _extract_year_from_prompt, and
+# _extract_month_year_pairs are now imported from calendar_utils above.
 
 
 def _pick_schema_column(schema: dict[str, list[dict]], table: str, candidates: tuple[str, ...]) -> str | None:
@@ -96,81 +79,6 @@ def _pick_schema_column(schema: dict[str, list[dict]], table: str, candidates: t
         if found:
             return found
     return None
-
-
-def _extract_months_from_prompt(prompt: str) -> list[int]:
-    """Return month numbers in prompt order, handling common abbreviations/misspellings."""
-    pattern = r"\b(" + "|".join(_MONTH_MAP.keys()) + r")\b"
-    seen: list[int] = []
-    for match in re.finditer(pattern, prompt.lower()):
-        month_num = _MONTH_MAP.get(match.group(1))
-        if month_num and month_num not in seen:
-            seen.append(month_num)
-    return seen
-
-
-def _extract_year_from_prompt(prompt: str) -> int | None:
-    """Find a four-digit year in the prompt, if present."""
-    match = re.search(r"\b(19|20)\d{2}\b", prompt)
-    return int(match.group(0)) if match else None
-
-
-def _extract_month_year_pairs(prompt: str, today: datetime.date) -> list[tuple[int, int]]:
-    """
-    Return (year, month) pairs in prompt order, pairing years to months using nearby year tokens
-    and reasonable propagation across year boundaries (e.g., 'December 2023 ... April 2024').
-    """
-    lower = prompt.lower()
-    pattern = r"(?P<month>" + "|".join(_MONTH_MAP.keys()) + r")\s*(?P<year>(?:19|20)\d{2})?"
-    month_matches = []
-    used_spans: list[tuple[int, int]] = []
-    for m in re.finditer(pattern, lower):
-        month_num = _MONTH_MAP.get(m.group("month"))
-        if not month_num:
-            continue
-        year_val = int(m.group("year")) if m.group("year") else None
-        month_matches.append({"month": month_num, "year": year_val, "pos": m.start(), "end": m.end()})
-        if year_val is not None:
-            used_spans.append((m.start("year"), m.end("year")))
-
-    if not month_matches:
-        return []
-
-    year_tokens = []
-    for y in re.finditer(r"(19|20)\d{2}", lower):
-        span = (y.start(), y.end())
-        if any(not (span[1] <= us[0] or span[0] >= us[1]) for us in used_spans):
-            continue
-        year_tokens.append((int(y.group()), y.start()))
-    year_tokens.sort(key=lambda t: t[1])
-
-    pairs: list[tuple[int, int]] = []
-    current_year = None
-    for match in month_matches:
-        if match["year"]:
-            current_year = match["year"]
-            pairs.append((current_year, match["month"]))
-            continue
-
-        if current_year is None and year_tokens:
-            # Pick the nearest future year token if available; otherwise the last year token.
-            future_year = next((yt[0] for yt in year_tokens if yt[1] >= match["pos"]), None)
-            current_year = future_year if future_year else year_tokens[-1][0]
-        if current_year is None:
-            current_year = today.year
-
-        pairs.append((current_year, match["month"]))
-
-    deduped: list[tuple[int, int]] = []
-    seen_pairs: set[tuple[int, int]] = set()
-    for pair in pairs:
-        if pair in seen_pairs:
-            LOGGER.debug("Dropping overlapping month/year pair %s from prompt '%s'", pair, prompt)
-            continue
-        seen_pairs.add(pair)
-        deduped.append(pair)
-
-    return deduped
 
 
 def handle_top_selling_question(cursor: pyodbc.Cursor, prompt: str, today: datetime.date) -> dict | None:
