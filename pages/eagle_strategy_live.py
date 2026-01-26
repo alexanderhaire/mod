@@ -41,11 +41,11 @@ if st.button("Scan Live Markets"):
                 display_df = opportunities.copy()
                 display_df['Yield (%)'] = display_df['apy'].apply(lambda x: f"{x:.2f}%")
                 display_df['Price'] = display_df['price'].apply(lambda x: f"${x:.3f}")
-                display_df['Max Safe Bet'] = display_df['max_safe_capital'].apply(lambda x: f"${x:.2f}")
+                display_df['Kelly Bet'] = display_df['max_safe_capital'].apply(lambda x: f"${x:.2f}")
                 display_df['Time Left'] = display_df['days_left'].apply(lambda x: f"{x:.1f} Days")
                 
                 st.dataframe(
-                    display_df[['question', 'Price', 'Yield (%)', 'Time Left', 'Max Safe Bet', 'market_id']],
+                    display_df[['question', 'Price', 'Yield (%)', 'Time Left', 'Kelly Bet', 'market_id']],
                     use_container_width=True
                 )
             else:
