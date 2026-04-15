@@ -1,0 +1,215 @@
+Date,Item,Description,Action,Model Score,Model Rec,Top Factor,Model Approved
+2026-02-11,TIRE REPAIR,Truck 37,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-10,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-10,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-10,JRM FERROMAN CASE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-10,JRM FERROMAN JUG,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-10,MISCINTGR80,T-DET EPO 62 soil wetting agent,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-09,TIRE REPAIR TRUCK #5,000,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-09,NPKAQUA,Aqua Ammonia 23%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,POTENTIO METER,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,1/4 HP PUMP,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,AIR COMPRESSOR MAINTENENCE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,CHEGLUCO,Sodium Glucoheptonate  (Plus Freight),BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-02-06,NPKAQUA,Aqua Ammonia 23%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,JAW COUPLING HUB,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,DYNA ZONE LABELS,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-06,DYNA GREEN ORGANICS,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-05,SO4FEDRY19,Iron Sulfate 19%,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-02-05,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-05,NPK0030CDI,Dyna Flo 0-0-30 Potassium Carbonate,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-03,REC-SO4FELIQ,Iron Sulfate Solution - receiving to be diluted,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-02-03,MRCCCN110,Copper Count N - consignment only,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-02-03,3X3 NIPPLES,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-02,TIRE REPAIR,Truck Repair #35,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-02-02,CHEGLUCOGR50CDI,Sodium Glucoheptonate / GR-50 NVM purchased by CDI,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-30,REC-NO3FE,Iron Nitrate Solution - receiving to be diluted,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-30,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-30,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-30,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-30,CHEH2SO4,Sulfuric Acid (66 Baume = 93%),BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-29,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-29,2 X 2 X .160 X 36 WHT VBOARD,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-29,ZZ30GAL,30 Gallon Drum,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-29,ZZ55GAL,55 Gallon Drum,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-29,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-29,DONKEY FIX,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-29,DONKEY FIX,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-29,NPKUREA,Urea Dry  46% 1 Ton Bags,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-28,REPAIRS MICRO,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-28,ZZ30GAL,30 Gallon Drum,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-28,SERVICE AIR COMPRESSOR,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-27,MRCCCN110,Copper Count N - consignment only,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-27,MRCCCN110,Copper Count N - consignment only,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-27,NPK2800,N-Sure 28-0-0 --  N28,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-26,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-26,NO3CA12,Calcium Nitrate 12%,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-26,PASSENGER SIDE BACK AXEL,water truck 5,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-26,SERVICE,Micro plant mixer,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-23,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-23,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-23,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-23,MRCCCN110,Copper Count N - consignment only,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-23,NO3ZN,Zinc Nitrate 17%,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-23,NPKATS,Ammonium Thiosulfate 12-0-0 26,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-23,NPKKCL62,Muriate of Potash,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-22,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-22,SERVICE CHARGE,Micro Scale,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-22,NPKNPHURCDI,pHury 15-0-0-16,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-22,ZZ2.5GALFFL,2.5 Gallon Squat Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-22,ZZ2.5GALTALL,2.5 Gallon Tall F Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-21,NO3CA12,Calcium Nitrate 12%,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-21,FLOOR SCALE,Service,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-20,TRUCK REPAIR,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-20,SO4FEDRY19,Iron Sulfate 19%,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-19,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,REPLACE SEAL,Fertilizer Plant Pump,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,SERVICE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,LABOR,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,MISC,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,PARTS,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,TAX,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-19,NPKKTS,Potassium Thiosulfate 0-0-25 17 KTS,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-16,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-16,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-16,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-16,NPKKCL62,Muriate of Potash,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-16,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-16,ZZ30GAL,30 Gallon Drum,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-16,CHESORB,Sorbitol 70%,BOUGHT,55.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-15,MISCH2O2,Hydrogen Peroxide 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-15,MISCINTGR80,T-DET EPO 62 soil wetting agent,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-14,ZZ2.5GALFFL,2.5 Gallon Squat Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-14,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-14,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-14,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-14,NPKKCL62,Muriate of Potash,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-13,CONVEYOR,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-13,PALLET B GRADE,B Grade Pallet,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-13,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-13,CHELIGDRY,Lignin Sulfonate Dry (Marasperse AG),BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-12,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-12,SO4FEDRY19,Iron Sulfate 19%,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-09,THIOCACDI,Calcium Thiosulfate,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-09,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-08,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-08,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-08,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-07,NPKKCL62,Muriate of Potash,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-07,REPAIRS MICRO,Air compressor,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-07,TANK LIDS,For Fertilizer Truck,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-07,MISCH2O2,Hydrogen Peroxide 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-06,MISCINTGR80,T-DET EPO 62 soil wetting agent,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-06,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2026-01-05,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-05,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-05,NO3MG63,Magnesium Nitrate 6.3%,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2026-01-02,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2026-01-02,EDTAFEHE,Iron HEDTA 4.5% Liquid,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-31,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-31,PVC VAN STONE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-31,"Q-D DUST CAP 2"" PP BLK BANJO",,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-31,"Q-D DUST CAP 3"" PP BLK BANJO",,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-31,SERVICE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-30,DC-753 VARIOUS JUG LABELS,DC-753 Various Jug Labels Rew 4,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-30,SO4FEDRY19,Iron Sulfate 19%,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-30,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-29,ZZ30GAL,30 Gallon Drum,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-26,REC-NPKPHOS85,Phosphoric Acid 85% - receiving to be diluted,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-26,MISCINTGR80,T-DET EPO 62 soil wetting agent,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-24,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-24,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-23,ZZ250GAL,250 Gallon IBC,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-23,NPKKCL62,Muriate of Potash,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-23,REPAIRS MICRO,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-22,NPK2800,N-Sure 28-0-0 --  N28,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-22,TIRE REPAIR TRUCK 38,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-19,THIOCACDI,Calcium Thiosulfate,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-19,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-19,ZZ30GAL,30 Gallon Drum,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-19,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-18,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-17,ZZ2.5GALFFL,2.5 Gallon Squat Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-17,NO3CA12,Calcium Nitrate 12%,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-17,SO4FELIQ,Iron Sulphate Liquid 10%,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-17,NO3FE,Iron Nitrate 10%,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-17,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-17,NO3ZN,Zinc Nitrate 17%,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-17,NO3ZN,Zinc Nitrate 17%,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-16,ZZ55GAL,55 Gallon Drum,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-16,ZZ2.5GALFFL,2.5 Gallon Squat Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-16,LABOR,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-16,MILEAGE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-16,MISC,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-15,TIRES,Tires for truck 33,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-15,ZZ30GAL,30 Gallon Drum,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-15,ZZ2.5GALF,2.5 F-style Jug/Box combo Haz-Mat,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-15,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-15,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-15,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-15,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-12,ZZ2.5GALFFL,2.5 Gallon Squat Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-11,NPKPHOS85,Phosphoric Acid 85%,BOUGHT,35.0,WAIT IF POSSIBLE - Conditions may improve,Rule-based fallback (model not trained),False
+2025-12-11,NPKNPHURCDI,pHury 15-0-0-16,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-10,NO3MG60,Magnesium Nitrate 6%,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-10,DIXON METAL HOSE FERT PLANT,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-10,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-09,NPKUREA,Urea Dry  46% 1 Ton Bags,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-09,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-09,NPKUREA,Urea Dry  46% 1 Ton Bags,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-08,FLEET #7 WORK,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-08,SOAR MICRONUTRIENT (CASE),Soar Micronutrient Mix (Roll 1000) Case,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,SOAR MICRONUTRIENT (CASE),Soar Micronutrient Mix (Roll 1000) Case,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,SOAR MICRONUTRIENT (JUG),Soar Micronutrient Mix (Roll 1000) Jug,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,TANK REPAIR,Welding Repairs for Macro,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-05,NPKKCL62,Muriate of Potash,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-04,ZZ30GAL,30 Gallon Drum,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-04,MISCINTGR80,T-DET EPO 62 soil wetting agent,BOUGHT,45.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-04,ZZ2.5GALFFL,2.5 Gallon Squat Solo Jug,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-12-04,FREIGHT,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-04,"PP HOSE EL 3"" MT X 3"" HOSE",,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-04,"Q-D FEM CPLR 3""T PP BLK BANJ",,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-03,PM/OIL CHANGE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-03,CHEGLUCOGR50CDI,Sodium Glucoheptonate / GR-50 NVM purchased by CDI,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-02,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-02,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-02,COPPER COUNT N,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-02,NO3CA12,Calcium Nitrate 12%,BOUGHT,65.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-02,NPKKCL62,Muriate of Potash,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-02,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-02,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-12-02,SO4FEDRY19,Iron Sulfate 19%,BOUGHT,60.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-12-01,PMX14080117,Mangesium Nitrate 6.19%,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-11-26,NPKPHOS85,Phosphoric Acid 85%,BOUGHT,35.0,WAIT IF POSSIBLE - Conditions may improve,Rule-based fallback (model not trained),False
+2025-11-26,5% TARRIF SURCHARGE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-26,SO4FEDRY19,Iron Sulfate 19%,BOUGHT,75.0,GOOD TO BUY - Favorable conditions,Rule-based fallback (model not trained),True
+2025-11-25,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-25,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-25,TIRE PATCH,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-25,SPINDLES FOR CAPPER,YELLOW DISC SPINDLES,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-24,NO3CA12,Calcium Nitrate 12%,BOUGHT,50.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-11-24,SO4BORON,Boron,BOUGHT,45.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-11-24,REC-NO3FE,Iron Nitrate Solution - receiving to be diluted,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-21,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-21,NPKKCL62,Muriate of Potash,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-20,NPKKNO3,Potassium Nitrate Soluble,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,STATE TIRE FEE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,RELENTLESS RLD,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,MEDIUM TIRE SCRAP,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,SO4BORON,Boron,BOUGHT,45.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-11-19,CHECITRIC,Citric Acid,BOUGHT,35.0,WAIT IF POSSIBLE - Conditions may improve,Rule-based fallback (model not trained),False
+2025-11-19,MED TIRE DISMOUNT,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,SHOP SUPPLIES,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-19,VALVE,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-18,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-18,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-18,NO3CA,Calcium Nitrate 11% / CN9,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-18,ZZ55GAL,55 Gallon Drum,BOUGHT,40.0,FAIR - Can buy if needed,Rule-based fallback (model not trained),False
+2025-11-18,HOSE FITTING,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-17,NPKU32,Urea Ammonium Nitrate 32%,BOUGHT,95.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True
+2025-11-17,PALLETS,,BOUGHT,80.0,BUY NOW - Optimal window,Rule-based fallback (model not trained),True

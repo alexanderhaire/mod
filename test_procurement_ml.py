@@ -59,6 +59,8 @@ def main():
     print(f"  Days of Coverage: {features.days_of_coverage:.1f}")
     print(f"  Usage 30d Avg: {features.usage_30d_avg:.2f}")
     print(f"  Vendor Payment Days: {features.vendor_payment_days}")
+    print(f"  Lead Time Volatility: {features.lead_time_volatility:.1f} days")
+    print(f"  BOM Parent Trend: {features.parent_demand_trend:.4f}")
     
     # Test prediction (rule-based since model isn't trained yet)
     print("\n--- Prediction Test (Rule-Based Fallback) ---")

@@ -13,6 +13,8 @@ from constants import (
     LOGGER,
     PRIMARY_LOCATION,
     RAW_MATERIAL_CLASS_CODES,
+    INVENTORY_GL_CODES,
+    INVENTORY_EXCLUDED_ITEMS,
 )
 
 RAW_MATERIAL_CLASS_LIST = "', '".join(RAW_MATERIAL_CLASS_CODES)
@@ -86,7 +88,8 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                 SUM(l.EXTDCOST) as EXTDCOST,
                 MAX(h.ORFRTAMT) as ORFRTAMT,
                 MAX(h.SUBTOTAL) as SUBTOTAL,
-                (SELECT TOP 1 UNITCOST FROM IV10200 iv WHERE iv.RCPTNMBR = l.POPRCTNM AND iv.ITEMNMBR = l.ITEMNMBR) as InventoryUnitCost
+                (SELECT TOP 1 UNITCOST FROM IV10200 iv WHERE iv.RCPTNMBR = l.POPRCTNM AND iv.ITEMNMBR = l.ITEMNMBR) as InventoryUnitCost,
+                MAX(l.PONUMBER) as PONUMBER
             FROM POP30310 l
             JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
             LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
@@ -171,6 +174,7 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                         'VendorID': str(r.get('VENDORID', '')).strip(),
                         'VendorName': str(r.get('VENDNAME', '')).strip(),
                         'VendorPhone': final_phone,
+                        'PONumber': str(r.get('PONUMBER', '')).strip(),
                         'UofM': str(r.get('UOFM', '')).strip(),
                         'OriginalCost': landed_cost_val,
                         'ExtendedCost': ext_cost,
@@ -215,6 +219,17 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
                     r['DeliveredCost'] = avg_cost # Match AvgCost
                     r['LandedCost'] = avg_cost # Match AvgCost
                     r['Quantity'] = float(r.get('Quantity') or 0)
+                    
+                    # Add missing keys expected by UI to avoid "Column not found" errors
+                    r['VendorID'] = None
+                    r['VendorName'] = None
+                    r['VendorPhone'] = None
+                    r['PONumber'] = None
+                    r['UofM'] = None
+                    r['OriginalCost'] = avg_cost
+                    r['ExtendedCost'] = avg_cost * r['Quantity']
+                    r['IsAnomalyFix'] = False
+                    
                     history.append(r)
         
         # Return real data only - no synthetic fallback
@@ -262,7 +277,17 @@ def get_inventory_distribution(
             AVG(i.CURRCOST) as UnitCost
         FROM IV00101 i
         LEFT JOIN IV00102 q ON i.ITEMNMBR = q.ITEMNMBR AND q.LOCNCODE = ?
+        -- Join for Cost/GL Validation
+        LEFT JOIN IV40400 ClassAccts ON i.ITMCLSCD = ClassAccts.ITMCLSCD
+        LEFT JOIN GL00105 GL ON GL.ACTINDX = (
+            CASE 
+                WHEN i.IVIVINDX > 0 THEN i.IVIVINDX 
+                ELSE ClassAccts.IVIVINDX 
+            END
+        )
         WHERE i.ITEMTYPE IN (0, 1, 2)
+            AND i.ITEMNMBR NOT IN {tuple(INVENTORY_EXCLUDED_ITEMS)}
+            AND RTRIM(GL.ACTNUMST) IN {tuple(INVENTORY_GL_CODES)}
             {segment_filter}
         GROUP BY i.ITEMNMBR, i.USCATVLS_1
         HAVING SUM(ISNULL(q.QTYONHND, 0)) > 0
@@ -920,8 +945,9 @@ def calculate_inventory_runway(cursor: pyodbc.Cursor, item_number: str, fallback
     try:
         # Get current inventory at the primary location
         inv_query = """
-        SELECT 
+        SELECT
             SUM(QTYONHND) as OnHand,
+            SUM(ATYALLOC) as Allocated,
             SUM(QTYONORD) as OnOrder,
             SUM(QTYBKORD) as BackOrdered
         FROM IV00102
@@ -930,9 +956,10 @@ def calculate_inventory_runway(cursor: pyodbc.Cursor, item_number: str, fallback
         """
         cursor.execute(inv_query, item_number, PRIMARY_LOCATION)
         inv_row = cursor.fetchone()
-        
+
         on_hand = float(inv_row[0] or 0) if inv_row else 0
-        on_order = float(inv_row[1] or 0) if inv_row else 0
+        allocated = float(inv_row[1] or 0) if inv_row else 0
+        on_order = float(inv_row[2] or 0) if inv_row else 0
 
         # Add open POs at the primary location (status not closed/received/canceled)
         try:
@@ -964,9 +991,9 @@ def calculate_inventory_runway(cursor: pyodbc.Cursor, item_number: str, fallback
             daily_usage = 0
         
         # Calculate runway
-        # STRICT RULE: Only count On-Hand for runway to avoid false security
-        available_stock = on_hand 
-        # previously: available_stock = on_hand + on_order
+        # Use available stock (on hand minus allocated) to avoid false security
+        available_stock = on_hand - allocated
+        # Note: on_order is tracked separately and not included in available_stock
         if daily_usage > 0:
             # SAFETY BUFFER: Subtract 7 days to ensure emergency stock
             raw_runway = available_stock / daily_usage
@@ -1011,10 +1038,10 @@ def calculate_seasonal_burn_metrics(
 
     - Uses exponential decay (15% drop per month) to weight recent usage higher.
     - Applies a seasonal factor based on the current month's historical usage.
-    - Days of coverage uses ONLY On Hand stock (strict View).
+    - Days of coverage uses available stock (on_hand parameter should be Available = On Hand - Allocated).
     """
     today = today or datetime.date.today()
-    # STRICT RULE: Only count On-Hand for runway
+    # Use the available stock passed in (should be Available = On Hand - Allocated)
     available_stock = float(on_hand or 0)
 
     if not usage_history:
@@ -1075,10 +1102,63 @@ def calculate_seasonal_burn_metrics(
     seasonal_factor = max(0.25, min(seasonal_factor, 3.0))
     seasonal_burn_rate = decayed_daily_usage * seasonal_factor
     
-    # SAFETY BUFFER: Subtract 7 days
+    # Calculate Lumpy Usage Metrics (CV and Sparsity)
+    if month_totals:
+        usage_values = list(month_totals.values())
+        mean_usage = sum(usage_values) / len(usage_values)
+        
+        # Coefficient of Variation (CV) = StdDev / Mean
+        if mean_usage > 0 and len(usage_values) > 1:
+            variance = sum((x - mean_usage) ** 2 for x in usage_values) / (len(usage_values) - 1)
+            std_dev = variance ** 0.5
+            cv = std_dev / mean_usage
+        else:
+            cv = 0.0
+            
+        # Sparsity: % of months in range with 0 usage
+        # We need to know the full range of months to calculate true sparsity
+        if len(usage_history) > 0:
+            # Approximate based on months with data vs total possible months in range
+            # This is a heuristic if we don't have a dense calendar yet
+            # A better way is to check the number of distinct months vs the span
+            # For now, let's use the zeroes explicitly passed if any, or implied zeros?
+            # actually usage_history usually only contains records with activity.
+            # So Sparsity ~= 1 - (Active Months / Total Months Span)
+            
+            # Find span
+            min_y, min_m = 9999, 99
+            max_y, max_m = 0, 0
+            
+            for m_num in month_totals.keys():
+                # We only have month numbers here, which is risky if spanning years.
+                # Let's rely on the loop above
+                pass
+            
+            # Re-scan history for span
+            dates = []
+            for record in usage_history:
+                 y = record.get('Year')
+                 m = record.get('Month')
+                 if y and m:
+                     dates.append(datetime.date(int(y), int(m), 1))
+            
+            if dates:
+                min_date = min(dates)
+                max_date = max(dates)
+                delta_months = (max_date.year - min_date.year) * 12 + (max_date.month - min_date.month) + 1
+                active_months = len(set(dates))
+                sparsity = 1.0 - (active_months / delta_months) if delta_months > 0 else 0.0
+            else:
+                sparsity = 1.0
+        else:
+             sparsity = 1.0
+    else:
+        cv = 0.0
+        sparsity = 1.0
+
+    # Calculate Days of Coverage (Restored)
     if seasonal_burn_rate > 0:
-        raw_days = available_stock / seasonal_burn_rate
-        days_of_coverage = max(0, raw_days - 7)
+        days_of_coverage = available_stock / seasonal_burn_rate
     else:
         days_of_coverage = None
 
@@ -1089,6 +1169,8 @@ def calculate_seasonal_burn_metrics(
         'seasonal_factor': seasonal_factor,
         'days_of_coverage': days_of_coverage,
         'available_stock': available_stock,
+        'usage_cv': cv,
+        'usage_sparsity': sparsity
     }
 
 
@@ -1140,6 +1222,8 @@ def recommend_optimal_buy_window(
     today: datetime.date | None = None,
     on_order: float | None = None,
     strategy: str = "mixed",
+    usage_cv: float = 0.0,
+    usage_sparsity: float = 0.0,
 ) -> dict[str, Any]:
     """
     Recommend the best day (within remaining coverage) to place a buy.
@@ -1154,6 +1238,23 @@ def recommend_optimal_buy_window(
     strategy: 'mixed' (default), 'inventory' (safety first), or 'price' (lowest cost first).
     """
     today = today or datetime.date.today()
+
+    # --- LUMPY USAGE CHECK ---
+    # If usage is highly irregular, do not recommend a date based on average burn.
+    # CV > 1.2 implies std_dev is larger than mean (high variance)
+    # Sparsity > 0.4 implies 40% of months have NO usage.
+    if usage_cv > 1.2 or usage_sparsity > 0.4:
+        return {
+            'status': 'on_order_only',
+            'reason': 'Irregular Usage Detected',
+            'days_from_now': 0,
+            'expected_price': 0.0,
+            'current_price': 0.0,
+            'price_delta': 0.0,
+            'latest_safe_day': 0,
+            'confidence': 0.0,
+            'message': f"Usage is lumpy (CV: {usage_cv:.1f}, Sparsity: {usage_sparsity:.0%}). Buy only upon confirmed requirement."
+        }
 
     if not price_history:
         return {

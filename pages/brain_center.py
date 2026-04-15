@@ -3,6 +3,7 @@ import pandas as pd
 from ui_utils import render_pulse_header
 from user_brain import get_brain, get_hive
 from db_pool import get_connection as get_pooled_connection
+from procurement_ml import ProcurementMLOptimizer
 
 # Page Config
 st.set_page_config(page_title="Brain Center", page_icon="🧠", layout="wide")
@@ -73,12 +74,22 @@ def render_brain_center():
                 st.balloons()
                 st.rerun()
         with col2:
-            conf = brain.get_brain_health()
+            # Fetch Real Model Accuracy
+            accuracy = 0.0
+            is_trained = False
+            with get_pooled_connection() as conn:
+                optimizer = ProcurementMLOptimizer(conn.cursor())
+                metrics = optimizer.get_model_metrics()
+                accuracy = metrics.get('last_accuracy', 0.0)
+                is_trained = metrics.get('is_trained', False)
+
+            status_text = "Model Trained" if is_trained else "Learning Needed"
+            
             st.markdown(f"""
             <div class="brain-card">
-                <div class="brain-metric-label">Brain Health</div>
-                <div class="brain-metric-value">{conf:.0%}</div>
-                <div class="brain-metric-delta">Learning in Progress</div>
+                <div class="brain-metric-label">Model Accuracy</div>
+                <div class="brain-metric-value">{accuracy:.1%}</div>
+                <div class="brain-metric-delta">{status_text}</div>
             </div>
             """, unsafe_allow_html=True)
         with col3:

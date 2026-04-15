@@ -7,8 +7,10 @@ import streamlit as st
 import hashlib
 
 # Import existing helpers for demand/market data
-from market_insights import calculate_buying_signals, get_priority_raw_materials
+# Import existing helpers for demand/market data
+from market_insights import get_priority_raw_materials
 from constants import RAW_MATERIAL_CLASS_CODES
+from procurement_ml import ProcurementMLOptimizer
 
 VENDOR_QUOTES_FILE = "vendor_quotes.jsonl"
 BROKER_QUOTES_FILE = "broker_quotes.jsonl"
@@ -33,7 +35,9 @@ class ProcurementOptimizer:
         self.cursor = cursor
         self.vendor_quotes = load_jsonl(VENDOR_QUOTES_FILE)
         self.broker_quotes = load_jsonl(BROKER_QUOTES_FILE)
+        self.broker_quotes = load_jsonl(BROKER_QUOTES_FILE)
         self.demand_data = None
+        self.ml_optimizer = ProcurementMLOptimizer(cursor)
 
     def _fetch_demand(self):
         """Get priority items (runway < 90 days or high usage)."""
@@ -49,9 +53,18 @@ class ProcurementOptimizer:
             runway_data = calculate_inventory_runway(self.cursor, item_num)
             
             # Fetch Buy Signal (Market Timing)
-            buy_signal = calculate_buying_signals(self.cursor, item_num, runway_days=runway_data.get('runway_days'))
-            signal_strength = buy_signal.get('signal', 'Hold')
-            signal_score = buy_signal.get('score', 0)
+            # Replaced heuristic with ML Model
+            ml_rec = self.ml_optimizer.get_buy_recommendation(
+                item_num, 
+                as_of_date=datetime.date.today()
+            )
+            
+            signal_strength = ml_rec.get('recommendation', 'Hold')
+            signal_score = ml_rec.get('buy_score', 0)
+            
+            # Extract features for UI
+            features = ml_rec.get('features', {})
+            volatility = features.get('lead_time_volatility', 0.0)
 
             items.append({
                 'Item': item_num,
@@ -62,7 +75,8 @@ class ProcurementOptimizer:
                 'Urgency': runway_data.get('urgency', 'OK'),
                 'Usage30d': runway_data.get('avg_daily_usage', 0) * 30, # Approx monthly usage
                 'BuySignal': signal_strength,
-                'SignalScore': signal_score
+                'SignalScore': signal_score,
+                'LeadTimeVolatility': volatility
             })
         
         self.demand_data = pd.DataFrame(items)
@@ -230,7 +244,63 @@ class ProcurementOptimizer:
                     'ActionLabel': action_label
                 })
 
+        # SHADOW MODE: Passive Logging
+        # Log "Strong Buy" signals automatically if Shadow Mode is active
+        from app import SHADOW_MODE
+        if SHADOW_MODE and pd is not None:
+             self._log_shadow_predictions(recommendations)
+
         return pd.DataFrame(recommendations)
+
+    def _log_shadow_predictions(self, recommendations):
+        """Silently log Strong Buy predictions to CSV for audit (Deduped by Day/Item)."""
+        log_file = "shadow_prediction_log.csv"
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 1. Load existing log to check for duplicates (avoid spamming)
+        existing_keys = set()
+        if os.path.exists(log_file):
+            try:
+                # Read only necessary columns to build key (Date, Item)
+                # Assuming Date is in Timestamp column or we parse it. 
+                # Let's just check if file has data.
+                df_hist = pd.read_csv(log_file)
+                # Create a set of (Date, Item)
+                for _, row in df_hist.iterrows():
+                    # Extract date part from Timestamp "YYYY-MM-DD HH:MM:SS"
+                    row_date = str(row['Timestamp']).split(' ')[0]
+                    existing_keys.add((row_date, row['Item']))
+            except Exception:
+                pass # If file corrupt, we might dup, which is better than crashing
+
+        new_entries = []
+        
+        for rec in recommendations:
+            action = rec.get('ActionLabel', '')
+            # Filter for meaningful BUY signals
+            if "BUY" in action.upper() and "WEAK" not in action.upper():
+                # Check Dedupe
+                if (today_str, rec['Item']) in existing_keys:
+                    continue
+                
+                new_entries.append({
+                    "Timestamp": timestamp,
+                    "Item": rec['Item'],
+                    "Description": rec['Description'],
+                    "Action": action,
+                    "Score": rec['SignalScore'],
+                    "Confidence": rec.get('LeadTimeVolatility', 0),
+                    "Reason": "Passive Monitor"
+                })
+        
+        if new_entries:
+            try:
+                df_new = pd.DataFrame(new_entries)
+                df_new.to_csv(log_file, mode='a', header=not os.path.exists(log_file), index=False)
+                # print(f"Logged {len(new_entries)} predictions.") # Console log only
+            except Exception as e:
+                pass # Silent fail in background
 
 def render_procurement_cockpit(cursor):
     st.title(">> PROCUREMENT_COMMAND_CENTER")
@@ -244,6 +314,14 @@ def render_procurement_cockpit(cursor):
     
     with st.spinner("Running global optimization engine..."):
         df_opt = optimizer.optimize()
+
+    # SECTION 0: SHADOW MODE STATUS
+    from app import SHADOW_MODE
+    if SHADOW_MODE:
+        st.info("🕵️ **SHADOW MODE ACTIVE**: System is passively logging 'Strong Buy' predictions to `shadow_prediction_log.csv` for your review.")
+        st.divider()
+
+    # SECTION 1: CRITICAL RUNWAY ALERTS
 
     # SECTION 1: CRITICAL RUNWAY ALERTS
     # Highlighting items that NEED procurement now regardless of price
@@ -284,6 +362,10 @@ def render_procurement_cockpit(cursor):
             with col1:
                 st.markdown(f"**{rec['Item']}** - {rec['Description']}")
                 st.caption(f"Current Avg Cost: ${rec['CurrentCost']:.4f}")
+                
+                # Volatility Warning
+                if rec.get('LeadTimeVolatility', 0) > 7:
+                    st.caption(f"⚠️ **High Variance:** Vendor lead time varies by +/- {rec['LeadTimeVolatility']:.1f} days")
             
             with col2:
                 if is_verified:
@@ -320,6 +402,12 @@ def render_procurement_cockpit(cursor):
 @st.dialog("Purchase Order Preview")
 def preview_po_modal(rec):
     st.markdown(f"### 📄 DRAFT PURCHASE ORDER")
+    
+    # Shadow Mode Indicator
+    from app import SHADOW_MODE
+    if SHADOW_MODE:
+        st.warning("🕵️ **SHADOW MODE ACTIVE**: POs will be logged to CSV, NOT emailed.")
+
     st.markdown("---")
     
     # Header
@@ -371,7 +459,28 @@ def preview_po_modal(rec):
             st.rerun()
     with b2:
         if st.button("✅ Release PO", type="primary", use_container_width=True):
-            st.balloons()
-            st.success(f"PO Released to {rec['Vendor']}!")
-            # Logic to save PO would go here
+            if SHADOW_MODE:
+                # Log to CSV
+                log_data = {
+                    "Date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "Item": rec['Item'],
+                    "Description": rec['Description'],
+                    "Quantity": qty,
+                    "Vendor": rec.get('Vendor', 'Unknown'),
+                    "Price": unit_price,
+                    "Total": total_landed,
+                    "Reason": "Manual Release in Shadow Mode"
+                }
+                log_file = "shadow_po_log.csv"
+                try:
+                    df_log = pd.DataFrame([log_data])
+                    df_log.to_csv(log_file, mode='a', header=not os.path.exists(log_file), index=False)
+                    st.success(f"✅ PO Logged to {log_file} (Shadow Mode)")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Failed to log PO: {e}")
+            else:
+                st.balloons()
+                st.success(f"PO Released to {rec.get('Vendor', 'Unknown')}!")
+                # Logic to save PO would go here
 

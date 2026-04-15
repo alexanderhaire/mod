@@ -1,0 +1,18 @@
+
+Multi-Market Dutch Book (50 Mkts) RESULTS
+----------------------------------------
+Starting Capital: $10,000.00
+Ending Capital:   $52,939.58
+Total Return:     429.40%
+Annualized Ret:   86065.23%
+Total Trades:     2079
+Avg Profit/Trade: $20.65
+
+Multi-Market Cross Arb (50 Mkts) RESULTS
+----------------------------------------
+Starting Capital: $10,000.00
+Ending Capital:   $31,231.61
+Total Return:     212.32%
+Annualized Ret:   10035.73%
+Total Trades:     1432
+Avg Profit/Trade: $14.83

@@ -1,12 +1,26 @@
 {
   "1": {
     "favorite_items": [
-      "NPK1602                        ",
-      "NPK0030                        ",
-      "NPKU32                         ",
-      "NPK0030CDI                     ",
+      "GRPFISHEM                      ",
       "NO3CA                          ",
-      "MISCH2O2                       "
+      "GRPFULVIC                      ",
+      "NO3CA12                        ",
+      "NPKU32                         ",
+      "NO3MG60                        ",
+      "NPKPHOS75                      ",
+      "ZZ2.5GALF                      ",
+      "SO4BORIC                       ",
+      "ZZLIDSCAMO                     ",
+      "CHEMOLASS                      ",
+      "NPKKOHDRY                      ",
+      "NO3FE                          ",
+      "NO3MG63                        ",
+      "NPKPHOS85                      ",
+      "MISCH2O2                       ",
+      "MISCINTGR80                    ",
+      "SO4MOLY                        ",
+      "CHEH2SO4                       ",
+      "SURFEMT-MULZ                   "
     ],
     "favorite_categories": [],
     "favorite_vendors": [],
@@ -17,24 +31,74 @@
       8,
       14,
       15,
-      16
+      16,
+      17,
+      13,
+      10,
+      9,
+      7
     ],
     "prediction_hits": 0,
     "prediction_attempts": 0,
-    "last_updated": "2026-01-08T14:51:10.842673",
+    "last_updated": "2026-04-14T16:45:29.725897",
     "conversions": [],
     "decision_patterns": {
-      "avg_decision_time": 113.40292143821716,
+      "avg_decision_time": 153.16074466705322,
       "fastest_decisions": [],
       "slowest_decisions": [
-        "NPK0030CDI                     ",
-        "NPK1602                        ",
-        "NO3CA                          ",
-        "NPKU32                         "
+        "NPKKOHDRY                      ",
+        "NO3FE                          ",
+        "NO3MG63                        ",
+        "NPKPHOS85                      ",
+        "MISCINTGR80                    ",
+        "GRPFISHEM                      ",
+        "MISCH2O2                       ",
+        "SO4MOLY                        ",
+        "CHEH2SO4                       ",
+        "SURFEMT-MULZ                   "
       ],
       "chart_interactions": 0,
       "interaction_style": "Analytical / Deliberate"
     },
-    "love_level": 4
+    "love_level": 21
+  },
+  "anonymous": {
+    "favorite_items": [],
+    "favorite_categories": [],
+    "favorite_vendors": [],
+    "search_patterns": [],
+    "active_hours": [
+      8
+    ],
+    "buying_patterns": {
+      "preferred_po_days": [],
+      "preferred_po_week": [],
+      "avg_lead_time_preference": 0,
+      "reorder_thresholds": {},
+      "vendor_preferences": {},
+      "seasonal_patterns": {},
+      "order_frequency": {},
+      "typical_quantities": {}
+    },
+    "po_history": {
+      "total_pos": 0,
+      "total_value": 0,
+      "last_po_date": null,
+      "items_ordered": []
+    },
+    "prediction_hits": 0,
+    "prediction_attempts": 0,
+    "love_level": 0,
+    "learning_journal": [],
+    "conversions": [],
+    "decision_patterns": {
+      "avg_decision_time": 0,
+      "fastest_decisions": [],
+      "slowest_decisions": [],
+      "chart_interactions": 0,
+      "interaction_style": "Undetermined"
+    },
+    "last_updated": "2026-03-25T08:11:11.205194",
+    "erp_sync_date": null
   }
 }

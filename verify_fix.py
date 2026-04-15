@@ -1,28 +1,36 @@
 
-import logging
-from auto_trader import AutoTrader
-import pandas as pd
+import pyodbc
+from secrets_loader import build_connection_string
+from market_insights import fetch_product_price_history
 
-# Configure logging to see output
-logging.basicConfig(level=logging.INFO)
-
-def test_heart_beat():
-    print("Initializing AutoTrader...")
+def verify_fix():
+    conn_str, _, _, _ = build_connection_string()
     try:
-        trader = AutoTrader(mode="paper")
-        print("AutoTrader initialized.")
+        conn = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
         
-        # Test heart_beat with no market data (triggers _simulate_tick)
-        print("Testing heart_beat() with no market data...")
-        result = trader.heart_beat(market_data_feed=None)
+        item = "CHELIGLIQ"
+        print(f"Fetching history for {item}...")
+        history = fetch_product_price_history(cursor, item)
         
-        print("heart_beat() returned:", result)
-        print("SUCCESS: No crash encountered.")
+        if not history:
+            print("No history returned.")
+            return
+
+        first_record = history[0]
+        print("Keys in first record:")
+        print(list(first_record.keys()))
         
+        if 'PONumber' in first_record:
+            print("SUCCESS: PONumber key is present.")
+        else:
+            print("FAILURE: PONumber key is MISSING.")
+
     except Exception as e:
-        print(f"FAILURE: Crashed with error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 if __name__ == "__main__":
-    test_heart_beat()
+    verify_fix()

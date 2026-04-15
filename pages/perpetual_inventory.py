@@ -4,6 +4,7 @@ import pyodbc
 import io
 from datetime import date
 from secrets_loader import build_connection_string
+from constants import INVENTORY_GL_CODES, INVENTORY_EXCLUDED_ITEMS
 
 def render_page():
     st.title("Perpetual Inventory Report")
@@ -12,7 +13,7 @@ def render_page():
     with col1:
         target_date = st.date_input("Inventory As Of Date", value=date(2025, 9, 30))
     
-    st.caption(f"Showing inventory quantities for **MAIN** location, calculated as of {target_date}. Valued at *Current Cost*.")
+    st.caption(f"Showing inventory quantities for **MAIN** location, calculated as of {target_date}. Valued at *Historical Cost as of selected date*.")
 
     @st.cache_data(ttl=600, show_spinner=False)
     def fetch_inventory_data(as_of_date):
@@ -21,17 +22,28 @@ def render_page():
             conn = pyodbc.connect(conn_str)
             
             # 1. Get Base Item Info + Current Qty (MAIN Location Only)
-            query_base = """
+            query_base = f"""
             SELECT 
                 T1.ITEMNMBR,
                 T1.ITEMDESC,
                 T1.CURRCOST,
                 T2.QTYONHND as CurrentQty,
-                T3.ACTNUMST as GLCode
+                GL.ACTNUMST as GLCode
             FROM IV00101 T1
             JOIN IV00102 T2 ON T1.ITEMNMBR = T2.ITEMNMBR
-            LEFT JOIN GL00105 T3 ON T1.IVIVINDX = T3.ACTINDX
+            -- Join for Class Info to get default accounts if item level is 0
+            LEFT JOIN IV40400 ClassAccts ON T1.ITMCLSCD = ClassAccts.ITMCLSCD
+            -- Logic to determine which Account Index to use (Item level vs Class level)
+            -- IVIVINDX is Inventory Account Index
+            LEFT JOIN GL00105 GL ON GL.ACTINDX = (
+                CASE 
+                    WHEN T1.IVIVINDX > 0 THEN T1.IVIVINDX 
+                    ELSE ClassAccts.IVIVINDX 
+                END
+            )
             WHERE T2.LOCNCODE = 'MAIN'
+              AND T1.ITEMNMBR NOT IN {tuple(INVENTORY_EXCLUDED_ITEMS)}
+              AND RTRIM(GL.ACTNUMST) IN {tuple(INVENTORY_GL_CODES)}
             """
             base_df = pd.read_sql(query_base, conn)
             
@@ -46,23 +58,22 @@ def render_page():
             GROUP BY ITEMNMBR
             """
             
-            # 3. Get Last Cost AS OF target date (Approximation via Last Receipt/Adj)
-            # We look for the receipts (DOCTYPE=4) or Adjustments (DOCTYPE=1) 
-            # We want the *latest* one on or before the target date.
+            # 3. Get Last Cost AS OF target date
+            # Find the most recent transaction with a cost on or before target date
+            # Cost is item-level (not location-specific), so no TRXLOCTN filter
             query_cost = """
-            WITH RatedTransactions AS (
+            WITH RankedCosts AS (
                 SELECT 
                     ITEMNMBR,
                     UNITCOST,
-                    DOCDATE,
                     ROW_NUMBER() OVER (PARTITION BY ITEMNMBR ORDER BY DOCDATE DESC, DEX_ROW_ID DESC) as rn
                 FROM IV30300
                 WHERE DOCDATE <= ?
-                  AND DOCTYPE IN (4, 1) -- 4=Receipt, 1=Adjustment (Increase)
-                  AND UNITCOST > 0
+                  AND UNITCOST IS NOT NULL
+                  AND UNITCOST <> 0
             )
             SELECT ITEMNMBR, UNITCOST as LastCost
-            FROM RatedTransactions
+            FROM RankedCosts
             WHERE rn = 1
             """
             
@@ -97,8 +108,9 @@ def render_page():
     
     # Calculate Extended Cost
     # Use LastCost if available, else Current Cost
-    df['Unit Cost'] = df['LastCost'].fillna(df['CURRCOST'])
-    df['Extended Cost'] = df['Quantity'] * df['Unit Cost']
+    # Round to 5 decimal places to preserve precision (e.g., 2.17 not 2.2)
+    df['Unit Cost'] = df['LastCost'].fillna(df['CURRCOST']).round(5)
+    df['Extended Cost'] = (df['Quantity'] * df['Unit Cost']).round(2)
     
     # Formatting
     df_final = df[[
@@ -130,6 +142,13 @@ def render_page():
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         df_final.to_excel(writer, sheet_name='Perpetual Inventory', index=False)
         worksheet = writer.sheets['Perpetual Inventory']
+        
+        # Apply number formatting to cost columns (D=Unit Cost, E=Extended Cost)
+        from openpyxl.styles import numbers
+        for row in range(2, len(df_final) + 2):  # Start at row 2, skip header
+            worksheet[f'D{row}'].number_format = '#,##0.00###'  # Unit Cost - up to 5 decimals
+            worksheet[f'E{row}'].number_format = '#,##0.00'     # Extended Cost - 2 decimals
+        
         for idx, col in enumerate(df_final.columns):
             max_len = max(
                 df_final[col].astype(str).map(len).max(),

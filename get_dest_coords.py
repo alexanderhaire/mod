@@ -1,15 +1,21 @@
+import fitz
 
-from geopy.geocoders import Nominatim
+pdf_path = r'c:\Users\alexh\Downloads\mod\Fertilizer Commercial Values Survey 25-26.pdf'
+doc = fitz.open(pdf_path)
 
-def get_coords():
-    # User agent is required by Nominatim
-    geolocator = Nominatim(user_agent="cdi_vendor_portal_test")
-    location = geolocator.geocode("4206 Business Ln, Plant City, FL")
-    if location:
-        print(f"LAT={location.latitude}")
-        print(f"LON={location.longitude}")
-    else:
-        print("Address not found")
+fields = [
+    "Total Nitrogen",
+    "Nitrate Nitrogen",
+    "Ammoniacal Nitrogen",
+    "Water Soluble Nitrogen or Urea",
+    "Available Phosphorus",
+    "Potassium (from Muriate)",
+    "Potassium (from any source"
+]
 
-if __name__ == "__main__":
-    get_coords()
+for page_num in range(len(doc)):
+    page = doc[page_num]
+    for field in fields:
+        rects = page.search_for(field)
+        if rects:
+            print(f"Found '{field}' on page {page_num + 1} at {rects[0]}")

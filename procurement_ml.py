@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 import pyodbc
 
+from inventory_queries import fetch_parent_items_for_component
+
 try:
     from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
     from sklearn.linear_model import Lasso, Ridge
@@ -79,7 +81,9 @@ class ProcurementFeatures:
     credit_cost_factor: float = 0.0  # Working capital cost
     planning_lead_time: int = 14  # Days to receive goods
     actual_lead_time: int = 0 # Historical average lead time
+    lead_time_volatility: float = 0.0 # Std dev of lead time in days
     qty_on_order: float = 0.0 # Quantity currently on order
+    parent_demand_trend: float = 0.0 # Trend of parent items (if raw material)
     
     def to_array(self) -> np.ndarray:
         """Convert to numpy array for model input."""
@@ -103,6 +107,8 @@ class ProcurementFeatures:
             self.vendor_payment_days / 60.0,  # Normalize
             self.vendor_reliability_score,
             self.credit_cost_factor,
+            self.lead_time_volatility,
+            self.parent_demand_trend,
         ])
     
     @staticmethod
@@ -115,7 +121,8 @@ class ProcurementFeatures:
             "is_month_end", "seasonal_price_index", "days_of_coverage_norm",
             "usage_30d_avg", "usage_trend_slope", "usage_volatility",
             "reorder_point_distance", "payment_days_norm", "vendor_reliability",
-            "credit_cost_factor"
+            "reorder_point_distance", "payment_days_norm", "vendor_reliability",
+            "credit_cost_factor", "lead_time_volatility", "parent_demand_trend"
         ]
 
 
@@ -174,6 +181,9 @@ class ProcurementFeatureBuilder:
         inv_status = self._get_inventory_status(item_number)
         if inv_status:
             features = self._compute_inventory_features(features, inv_status, usage_df)
+            
+        # Get BOM derived demand
+        features = self._compute_bom_features(features, item_number, as_of_date)
         
         return features
     
@@ -199,10 +209,12 @@ class ProcurementFeatureBuilder:
                 h.VENDORID
             FROM POP30300 h
             JOIN POP30310 l ON h.POPRCTNM = l.POPRCTNM
+            JOIN POP30100 po ON l.PONUMBER = po.PONUMBER
             WHERE l.ITEMNMBR = ?
               AND h.RECEIPTDATE >= DATEADD(year, -2, ?)
               AND h.RECEIPTDATE <= ?
               AND l.EXTDCOST > 0
+              AND DATEDIFF(day, po.DOCDATE, h.RECEIPTDATE) > 0 -- Exclude same-day corrections
             ORDER BY h.RECEIPTDATE
             """
             self.cursor.execute(query, (item_number, as_of_date, as_of_date))
@@ -293,7 +305,22 @@ class ProcurementFeatureBuilder:
                       AND h.RECEIPTDATE > DATEADD(year, -2, GETDATE())
                       AND l.PONUMBER <> ''
                       AND h.RECEIPTDATE >= po.DOCDATE
+                      AND l.ACTLSHIP > 0 -- Real volume only
+                      AND DATEDIFF(day, po.DOCDATE, h.RECEIPTDATE) > 0 -- Ignore corrections
                 ) AS AvgGapDays,
+                (
+                    SELECT STDEV(DATEDIFF(day, po.DOCDATE, h.RECEIPTDATE))
+                    FROM POP30310 l
+                    JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+                    JOIN POP30100 po ON l.PONUMBER = po.PONUMBER
+                    WHERE l.ITEMNMBR = iv.ITEMNMBR 
+                      AND h.VENDORID = iv.VENDORID 
+                      AND h.RECEIPTDATE > DATEADD(year, -2, GETDATE())
+                      AND l.PONUMBER <> ''
+                      AND h.RECEIPTDATE >= po.DOCDATE
+                      AND l.ACTLSHIP > 0 
+                      AND DATEDIFF(day, po.DOCDATE, h.RECEIPTDATE) > 0
+                ) AS LeadTimeVolatility,
                 (
                     SELECT TOP 1 h.RECEIPTDATE
                     FROM POP30310 l
@@ -317,6 +344,7 @@ class ProcurementFeatureBuilder:
                     'payment_days': int(row.PaymentDays) if row.PaymentDays else 30,
                     'lead_time': int(row.PLANNINGLEADTIME) if row.PLANNINGLEADTIME else 14,
                     'actual_lead_time': int(row.AvgGapDays) if row.AvgGapDays else 0,
+                    'lead_time_volatility': float(row.LeadTimeVolatility) if row.LeadTimeVolatility else 0.0,
                     'last_volume': float(row.LastVolume) if row.LastVolume else 0.0,
                     'last_date': row.LastDate,  # Date object
                 }
@@ -463,6 +491,7 @@ class ProcurementFeatureBuilder:
             features.planning_lead_time = 14  # Default if 0 in DB
         
         features.actual_lead_time = vendor_info.get('actual_lead_time', 0)
+        features.lead_time_volatility = vendor_info.get('lead_time_volatility', 0.0)
         
         # Last purchase volume and recency
         features.vendor_last_volume = vendor_info.get('last_volume', 0.0)
@@ -509,6 +538,47 @@ class ProcurementFeatureBuilder:
         
         return features
 
+        return features
+    
+    def _compute_bom_features(
+        self,
+        features: ProcurementFeatures,
+        item_number: str,
+        as_of_date: datetime.date
+    ) -> ProcurementFeatures:
+        """Compute features derived from BOM parent demand."""
+        try:
+            parents, _ = fetch_parent_items_for_component(self.cursor, item_number)
+            if not parents:
+                return features
+                
+            # Aggregate parent demand trend
+            # If parents are trending up, we need more raw material
+            # We'll simple average the usage trends of the top 3 parents by volume
+            total_trend = 0.0
+            count = 0
+            
+            for row in parents[:3]: # Top 3 parents
+                parent_item = row.ParentItem.strip()
+                # Get parent usage
+                parent_usage = self._get_usage_history(parent_item, as_of_date)
+                if not parent_usage.empty and len(parent_usage) >= 3:
+                     # Calculate slope
+                    parent_usage = parent_usage.copy()
+                    parent_usage['days'] = (parent_usage['TransactionDate'] - parent_usage['TransactionDate'].min()).dt.days
+                    if parent_usage['days'].nunique() >= 2:
+                        slope, _ = np.polyfit(parent_usage['days'], parent_usage['Quantity'], 1)
+                        total_trend += slope
+                        count += 1
+            
+            if count > 0:
+                features.parent_demand_trend = total_trend / count
+                
+        except Exception as e:
+            LOGGER.warning(f"Error computing BOM features for {item_number}: {e}")
+            
+        return features
+
 
 class BuyWindowPredictor:
     """
@@ -525,6 +595,7 @@ class BuyWindowPredictor:
         self._scaler = StandardScaler() if HAS_SKLEARN else None
         self._is_trained = False
         self._feature_importance: dict[str, float] = {}
+        self._last_accuracy: float = 0.0 # Store last test R2 score
     
     def train(
         self, 
@@ -580,6 +651,7 @@ class BuyWindowPredictor:
             self._feature_importance[name] = float(importance)
         
         self._is_trained = True
+        self._last_accuracy = test_score
         
         LOGGER.info(f"Model trained: R² train={train_score:.3f}, test={test_score:.3f}")
         
@@ -606,25 +678,33 @@ class BuyWindowPredictor:
         if not self._is_trained:
             return self._rule_based_fallback(features)
         
-        X = features.to_array().reshape(1, -1)
-        X_scaled = self._scaler.transform(X)
-        
-        # Get prediction (0-1 range)
-        raw_score = float(self._model.predict(X_scaled)[0])
-        buy_score = max(0, min(100, raw_score * 100))
-        
-        # Confidence based on how extreme features are
-        confidence = self._estimate_confidence(features)
-        
-        # Top factors
-        top_factors = self._explain_prediction(features)
-        
-        return {
-            "buy_score": buy_score,
-            "confidence": confidence,
-            "recommendation": self._score_to_recommendation(buy_score),
-            "top_factors": top_factors,
-        }
+        try:
+            X = features.to_array().reshape(1, -1)
+            X_scaled = self._scaler.transform(X)
+            
+            # Get prediction (0-1 range)
+            raw_score = float(self._model.predict(X_scaled)[0])
+            buy_score = max(0, min(100, raw_score * 100))
+            
+            # Confidence based on how extreme features are
+            confidence = self._estimate_confidence(features)
+            
+            # Top factors
+            top_factors = self._explain_prediction(features)
+            
+            return {
+                "buy_score": buy_score,
+                "confidence": confidence,
+                "recommendation": self._score_to_recommendation(buy_score),
+                "top_factors": top_factors,
+            }
+        except ValueError as e:
+            if "feature" in str(e) or "dimension" in str(e).lower() or "expectation" in str(e).lower():
+                LOGGER.warning(f"Model feature mismatch (needs retraining): {e}")
+                fallback = self._rule_based_fallback(features)
+                fallback['top_factors'].insert(0, "Model needs retraining (Feature Update)")
+                return fallback
+            raise e
     
     def _rule_based_fallback(self, features: ProcurementFeatures) -> dict[str, Any]:
         """Fallback when model isn't trained."""
@@ -650,6 +730,16 @@ class BuyWindowPredictor:
         # Credit terms
         if features.vendor_payment_days >= 45:
             score += 5  # Good terms
+            
+        # BOM Parent Trend
+        if features.parent_demand_trend > 0:
+            score += 15 # Parents are selling more -> Buy raw materials now
+        elif features.parent_demand_trend < 0:
+             score -= 5 # Slowing down
+        
+        if features.lead_time_volatility > 7:
+            score -= 10  # Penalize high volatility
+            
         
         score = max(0, min(100, score))
         
@@ -703,7 +793,13 @@ class BuyWindowPredictor:
             factors.append("Declining price trend")
         elif features.price_trend_slope > 0.01:
             factors.append("Rising price trend")
+            
+        if features.lead_time_volatility > 7:
+             factors.append(f"High vendor urgency ({features.lead_time_volatility:.1f} days volatility)")
         
+        if features.parent_demand_trend > 0:
+            factors.append("Finished goods demand is rising (BOM)")
+            
         if features.vendor_payment_days >= 45:
             factors.append(f"Favorable payment terms (Net {features.vendor_payment_days})")
         
@@ -722,6 +818,8 @@ class BuyWindowPredictor:
                 'scaler': self._scaler,
                 'feature_importance': self._feature_importance,
                 'is_trained': self._is_trained,
+                'last_accuracy': self._last_accuracy,
+                'alignment_score': getattr(self, '_alignment_score', 0.0)
             }, f)
         
         LOGGER.info(f"Model saved to {path}")
@@ -743,6 +841,10 @@ class BuyWindowPredictor:
                 self._scaler = data['scaler']
                 self._feature_importance = data.get('feature_importance', {})
                 self._is_trained = data.get('is_trained', True)
+                self._last_accuracy = data.get('last_accuracy', 0.0)
+                self._alignment_score = data.get('alignment_score', 0.0)
+            
+            LOGGER.info(f"Model loaded from {path}")
             
             LOGGER.info(f"Model loaded from {path}")
             return True
@@ -763,6 +865,13 @@ class ProcurementMLOptimizer:
         
         # Try to load existing model
         self.predictor.load()
+        self._alignment_score = 0.0
+        self._validation_details = {}
+        
+        # Try to load alignment score if it exists in the pickle (metrics extension)
+        if hasattr(self.predictor, '_alignment_score'):
+             self._alignment_score = self.predictor._alignment_score
+
     
     def get_buy_recommendation(
         self, 
@@ -807,6 +916,83 @@ class ProcurementMLOptimizer:
                 "vendor_name": features.vendor_name,
             }
         }
+
+    def get_model_metrics(self) -> dict:
+        """Get current model health/accuracy metrics."""
+        # Prefer alignment score (User Alignment) over raw R2 if available
+        accuracy = self._alignment_score if self._alignment_score > 0 else getattr(self.predictor, '_last_accuracy', 0.0)
+        
+        return {
+            "is_trained": self.predictor._is_trained,
+            "last_accuracy": accuracy,
+            "feature_importance": self.predictor._feature_importance,
+            "alignment_score": self._alignment_score
+        }
+
+    def validate_model_performance(self, days_back: int = 90) -> dict[str, Any]:
+        """
+        Validate model by checking how often it agrees with actual recent purchases.
+        Updates self._alignment_score.
+        """
+        LOGGER.info(f"Validating model against last {days_back} days of purchases...")
+        try:
+            # Query recent purchases (History + Open)
+            query = """
+            SELECT h.DOCDATE, l.ITEMNMBR
+            FROM POP30100 h
+            JOIN POP30110 l ON h.PONUMBER = l.PONUMBER
+            WHERE h.DOCDATE >= DATEADD(day, ?, GETDATE()) AND l.ITEMNMBR <> ''
+            UNION ALL
+            SELECT h.DOCDATE, l.ITEMNMBR
+            FROM POP10100 h
+            JOIN POP10110 l ON h.PONUMBER = l.PONUMBER
+            WHERE h.DOCDATE >= DATEADD(day, ?, GETDATE()) AND l.ITEMNMBR <> ''
+            """
+            self.cursor.execute(query, (-days_back, -days_back))
+            rows = self.cursor.fetchall()
+            
+            if not rows:
+                return {"error": "No recent data"}
+            
+            matches = 0
+            total = 0
+            
+            for row in rows:
+                buy_date = row.DOCDATE
+                if isinstance(buy_date, datetime.datetime):
+                    buy_date = buy_date.date()
+                item = row.ITEMNMBR.strip()
+                
+                try:
+                    # Check what the model would have said
+                    features = self.feature_builder.build_features(item, as_of_date=buy_date)
+                    pred = self.predictor.predict(features)
+                    
+                    # Did model say BUY? (Score >= 60)
+                    if pred['buy_score'] >= 60:
+                        matches += 1
+                    total += 1
+                except Exception:
+                    continue
+            
+            if total > 0:
+                self._alignment_score = matches / total
+                # Persist this score to the predictor so it saves with the model
+                self.predictor._alignment_score = self._alignment_score
+                self.predictor.save() # Save updated metrics
+                
+                LOGGER.info(f"Validation complete: {self._alignment_score:.1%} match rate ({matches}/{total})")
+                return {
+                    "alignment_score": self._alignment_score,
+                    "total_analyzed": total,
+                    "matches": matches
+                }
+            
+            return {"alignment_score": 0.0}
+            
+        except Exception as e:
+            LOGGER.error(f"Validation failed: {e}")
+            return {"error": str(e)}
     
     def train_model(self, lookback_months: int = 24) -> dict[str, Any]:
         """
@@ -882,16 +1068,28 @@ class ProcurementMLOptimizer:
                 if len(purchases) < 5:
                     continue  # Need enough history
                 
-                # Calculate percentiles for labeling
-                prices = [p['price'] for p in purchases if p['price'] > 0]
-                if not prices:
-                    continue
-                    
+                # Calculate stats for outlier detection (Panic Buys)
+                # If Price > Mean + 1.5 StdDev, assume it was a forced "Panic Buy" (Mistake)
+                # User Request: "Unless it is clearly a mistake... U32 got too low"
+                mean_price = np.mean(prices)
+                std_price = np.std(prices)
+                panic_threshold = mean_price + (1.5 * std_price)
+                
                 p30 = np.percentile(prices, 30)
                 
                 for purchase in purchases:
-                    if purchase['price'] <= 0:
+                    price = purchase['price']
+                    if price <= 0:
                         continue
+                        
+                    # EXCLUDE PANIC BUYS from training data
+                    # We don't want the model to learn that buying at high prices is "User Behavior"
+                    # It was a forced error.
+                    if price > panic_threshold:
+                         continue
+
+                    # Label: 1.0 if good price, 0.0 if not
+                    label = 1.0 if price <= p30 else 0.0
                     
                     # Build features as of purchase date
                     try:

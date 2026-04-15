@@ -26,6 +26,8 @@ from constants import (
     LOGGER,
     RAW_MATERIAL_CLASS_CODES,
 )
+# --- CONFIGURATION ---
+SHADOW_MODE = True  # Set to True to log POs to CSV instead of sending emails
 from context_utils import summarize_chat_history
 from feedback import attachments_from_paste, log_feedback, save_feedback_attachments
 from market_insights import (
@@ -61,7 +63,7 @@ from market_insights import (
 from ml_engine import OnlineLinearRegressor, PortfolioOptimizer, Backtester
 from portfolio_manager import PortfolioManager
 from auto_trader import AutoTrader
-from pages.quant_dashboard import render_quant_dashboard
+from archive.quant_dashboard import render_quant_dashboard
 from ui_utils import (
     format_currency, render_kpi_card, render_trend_line, render_dataframe_with_selection,
     add_margin_metrics, render_pulse_header,
@@ -166,9 +168,15 @@ st.sidebar.caption("System v1.5.1 [ML Logic Active]")
 st.sidebar.divider()
 try:
     st.sidebar.page_link("pages/brain_center.py", label="🧠 Brain Center", icon="❤️")
+    st.sidebar.page_link("pages/purchasing.py", label="🛒 Purchasing", icon="📊")
+    st.sidebar.page_link("pages/reorder_recommendations.py", label="📦 Reorder Recommendations", icon="📊")
+    st.sidebar.page_link("pages/kanban_reorder.py", label="🔁 Kanban Reorder (Integrated)", icon="📊")
+    st.sidebar.page_link("pages/delivery_cost_per_mile.py", label="🚚 Delivery Cost/Mile", icon="📊")
+    st.sidebar.page_link("pages/label_tracking.py", label="🏷️ Label Tracking", icon="📊")
 except AttributeError:
     # Fallback for older Streamlit versions
     st.sidebar.markdown("[🧠 Brain Center](/brain_center)")
+    st.sidebar.markdown("[📦 Reorder Recommendations](/reorder_recommendations)")
 st.sidebar.markdown("### ⚡ Execution Mode")
 mode_select = st.sidebar.selectbox(
     "Trading Environment",
@@ -990,7 +998,7 @@ def _build_buy_calendar(cursor: pyodbc.Cursor, df_priority: pd.DataFrame, today:
 
         burn_metrics = calculate_seasonal_burn_metrics(
             usage_history=usage_hist or [],
-            on_hand=runway.get("on_hand", 0),
+            on_hand=runway.get("available", 0),
             on_order=runway.get("on_order", 0),
             today=today,
         )
@@ -2702,7 +2710,7 @@ try:
 
                 burn_metrics = calculate_seasonal_burn_metrics(
                     usage_history=usage_hist or [],
-                    on_hand=inventory.get('TotalOnHand', 0),
+                    on_hand=inventory.get('Available', 0),
                     on_order=inventory.get('OnOrder', 0),
                     today=datetime.date.today(),
                 )
@@ -2713,6 +2721,8 @@ try:
                     available_stock=burn_metrics.get('available_stock') if burn_metrics else None,
                     on_order=inventory.get('OnOrder', 0),
                     today=datetime.date.today(),
+                    usage_cv=burn_metrics.get('usage_cv', 0.0) if burn_metrics else 0.0,
+                    usage_sparsity=burn_metrics.get('usage_sparsity', 0.0) if burn_metrics else 0.0,
                 )
 
                 # Build chatbot context
@@ -3048,13 +3058,15 @@ try:
                                     'AvgCost': 'mean',
                                     'LandedCost': 'mean',
                                     'TransactionCount': 'sum',
-                                    'Quantity': 'sum'
+                                    'Quantity': 'sum',
+                                    'PONumber': lambda x: ", ".join(sorted(set(str(v) for v in x if v and str(v).strip()))) # Join unique POs
                                 }).reset_index()
 
                                 chart_data['AvgCost'] = chart_data['AvgCost'].astype(float)
                                 chart_data['LandedCost'] = chart_data['LandedCost'].astype(float)
                                 chart_data['TransactionCount'] = chart_data['TransactionCount'].astype(float)
                                 chart_data['Quantity'] = chart_data['Quantity'].astype(float)
+                                chart_data['PONumber'] = chart_data['PONumber'].astype(str)
 
                                 # Base chart
                                 base = alt.Chart(chart_data).encode(
@@ -3067,7 +3079,8 @@ try:
                                         alt.Tooltip('TransactionDate', title='Date', format='%Y-%m-%d'),
                                         alt.Tooltip('AvgCost', title='Delivered Cost', format='$,.4f'),
                                         alt.Tooltip('LandedCost', title='Landed Cost', format='$,.4f'),
-                                        alt.Tooltip('Quantity', title='Quantity', format=',.0f')
+                                        alt.Tooltip('Quantity', title='Quantity', format=',.0f'),
+                                        alt.Tooltip('PONumber', title='PO Number')
                                     ]
                                 )
                                 line = cost_base.mark_line(color='#ffb000', strokeWidth=3)
@@ -3081,7 +3094,8 @@ try:
                                             alt.Tooltip('TransactionDate', title='Date', format='%Y-%m-%d'),
                                             alt.Tooltip('AvgCost', title='Delivered Cost', format='$,.4f'),
                                             alt.Tooltip('LandedCost', title='Landed Cost', format='$,.4f'),
-                                            alt.Tooltip('Quantity', title='Quantity', format=',.0f')
+                                            alt.Tooltip('Quantity', title='Quantity', format=',.0f'),
+                                            alt.Tooltip('PONumber', title='PO Number')
                                         ]
                                     )
                                     final_chart = alt.layer(bars, cost_line).resolve_scale(y='independent')
@@ -3435,26 +3449,52 @@ try:
                                 vendors = [v for v in sorted(hist_df['VendorName'].unique().tolist()) if v and str(v).strip()]
                                 
                                 if vendors:
-                                    # Create tabs: ALL + Vendors
-                                    tabs = st.tabs(["ALL"] + vendors)
-                                    
-                                    # Render for ALL
-                                    with tabs[0]:
-                                        render_price_chart(
-                                            filtered_hist_df,
-                                            safe_clamp,
-                                            start_date,
-                                            end_date,
-                                            date_bounds=(min_dt, max_dt),
-                                            usage_state_key=range_usage_state_key,
-                                            usage_override_key=range_usage_override_key,
-                                            usage_input_key=range_usage_key,
-                                        )
+                                    if len(vendors) > 5:
+                                        # --- CAROUSEL MODE ---
+                                        tabs = st.tabs(["ALL", "Vendor Details"])
                                         
-                                    # Render for each Vendor
-                                    for i, vendor in enumerate(vendors):
-                                        with tabs[i+1]:
-                                            vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == vendor]
+                                        # Render for ALL
+                                        with tabs[0]:
+                                            render_price_chart(
+                                                filtered_hist_df,
+                                                safe_clamp,
+                                                start_date,
+                                                end_date,
+                                                date_bounds=(min_dt, max_dt),
+                                                usage_state_key=range_usage_state_key,
+                                                usage_override_key=range_usage_override_key,
+                                                usage_input_key=range_usage_key,
+                                            )
+                                            
+                                        # Render Vendor Carousel
+                                        with tabs[1]:
+                                            # Session State for Index
+                                            carousel_key = f"vendor_carousel_idx_{product_item}"
+                                            if carousel_key not in st.session_state:
+                                                st.session_state[carousel_key] = 0
+                                                
+                                            # Navigation Buttons
+                                            c_prev, c_info, c_next = st.columns([1, 4, 1])
+                                            
+                                            with c_prev:
+                                                if st.button("◀ Prev", key=f"prev_{product_item}", use_container_width=True):
+                                                    st.session_state[carousel_key] = (st.session_state[carousel_key] - 1) % len(vendors)
+                                                    st.rerun() # Rerun to update view immediately
+                                                    
+                                            with c_next:
+                                                if st.button("Next ▶", key=f"next_{product_item}", use_container_width=True):
+                                                    st.session_state[carousel_key] = (st.session_state[carousel_key] + 1) % len(vendors)
+                                                    st.rerun()
+
+                                            # Current Vendor Display
+                                            idx = st.session_state[carousel_key]
+                                            current_vendor = vendors[idx]
+                                            
+                                            with c_info:
+                                                st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 1.2em; padding: 10px;'>{current_vendor} <span style='color: #888; font-size: 0.8em;'>({idx + 1}/{len(vendors)})</span></div>", unsafe_allow_html=True)
+
+                                            # Render Vendor Data
+                                            vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == current_vendor]
                                             
                                             # Display Vendor Phone if available
                                             if not vendor_df.empty and 'VendorPhone' in vendor_df.columns:
@@ -3462,8 +3502,6 @@ try:
                                                 phone_raw = str(phones[0]).strip() if phones else ""
                                                 
                                                 if phone_raw:
-                                                    # Format Phone: 80023860750000 -> (800) 238-6075 Ext. 0000
-                                                    # GP often stores as 14 chars (Area Code 3 + Prefix 3 + Number 4 + Ext 4)
                                                     formatted_phone = phone_raw
                                                     digits = "".join(filter(str.isdigit, phone_raw))
                                                     
@@ -3474,20 +3512,75 @@ try:
                                                     elif len(digits) == 7:
                                                         formatted_phone = f"{digits[:3]}-{digits[3:]}"
                                                         
-                                                    st.text_input("Phone 1", value=formatted_phone, disabled=True, key=f"phone_{i}_{str(vendor)[:10]}")
+                                                    st.text_input(f"Phone ({current_vendor})", value=formatted_phone, disabled=True, key=f"phone_carousel_{str(current_vendor)[:10]}")
                                                 else:
-                                                    st.text_input("Phone 1", value="No phone number", disabled=True, key=f"phone_{i}_{str(vendor)[:10]}")
+                                                    st.text_input(f"Phone ({current_vendor})", value="No phone number", disabled=True, key=f"phone_carousel_{str(current_vendor)[:10]}")
 
                                             render_price_chart(
-                                            vendor_df,
-                                            safe_clamp,
-                                            start_date,
-                                            end_date,
-                                            date_bounds=(min_dt, max_dt),
-                                            usage_state_key=f"{range_usage_state_key}_{vendor}",
-                                            usage_override_key=f"{range_usage_override_key}_{vendor}",
-                                            usage_input_key=f"{range_usage_key}_{vendor}",
-                                        )
+                                                vendor_df,
+                                                safe_clamp,
+                                                start_date,
+                                                end_date,
+                                                date_bounds=(min_dt, max_dt),
+                                                usage_state_key=f"{range_usage_state_key}_{current_vendor}",
+                                                usage_override_key=f"{range_usage_override_key}_{current_vendor}",
+                                                usage_input_key=f"{range_usage_key}_{current_vendor}",
+                                            )
+
+                                    else:
+                                        # --- NORMAL TABS MODE (<= 5) ---
+                                        tabs = st.tabs(["ALL"] + vendors)
+                                        
+                                        # Render for ALL
+                                        with tabs[0]:
+                                            render_price_chart(
+                                                filtered_hist_df,
+                                                safe_clamp,
+                                                start_date,
+                                                end_date,
+                                                date_bounds=(min_dt, max_dt),
+                                                usage_state_key=range_usage_state_key,
+                                                usage_override_key=range_usage_override_key,
+                                                usage_input_key=range_usage_key,
+                                            )
+                                            
+                                        # Render for each Vendor
+                                        for i, vendor in enumerate(vendors):
+                                            with tabs[i+1]:
+                                                vendor_df = filtered_hist_df[filtered_hist_df['VendorName'] == vendor]
+                                                
+                                                # Display Vendor Phone if available
+                                                if not vendor_df.empty and 'VendorPhone' in vendor_df.columns:
+                                                    phones = [p for p in vendor_df['VendorPhone'].unique() if p and str(p).strip()]
+                                                    phone_raw = str(phones[0]).strip() if phones else ""
+                                                    
+                                                    if phone_raw:
+                                                        # Format Phone: 80023860750000 -> (800) 238-6075 Ext. 0000
+                                                        # GP often stores as 14 chars (Area Code 3 + Prefix 3 + Number 4 + Ext 4)
+                                                        formatted_phone = phone_raw
+                                                        digits = "".join(filter(str.isdigit, phone_raw))
+                                                        
+                                                        if len(digits) == 14:
+                                                            formatted_phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:10]} Ext. {digits[10:]}"
+                                                        elif len(digits) == 10:
+                                                            formatted_phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+                                                        elif len(digits) == 7:
+                                                            formatted_phone = f"{digits[:3]}-{digits[3:]}"
+                                                            
+                                                        st.text_input("Phone 1", value=formatted_phone, disabled=True, key=f"phone_{i}_{str(vendor)[:10]}")
+                                                    else:
+                                                        st.text_input("Phone 1", value="No phone number", disabled=True, key=f"phone_{i}_{str(vendor)[:10]}")
+                                                    
+                                                render_price_chart(
+                                                vendor_df,
+                                                safe_clamp,
+                                                start_date,
+                                                end_date,
+                                                date_bounds=(min_dt, max_dt),
+                                                usage_state_key=f"{range_usage_state_key}_{vendor}",
+                                                usage_override_key=f"{range_usage_override_key}_{vendor}",
+                                                usage_input_key=f"{range_usage_key}_{vendor}",
+                                            )
                                 else:
                                     render_price_chart(
                                         filtered_hist_df,
@@ -3580,6 +3673,13 @@ try:
                 if buy_caption:
                     st.caption(f"Buy timing model: {buy_caption}")
                 st.caption("Burn rate uses on-hand + on-order, weighted for current season with decayed material usage.")
+
+
+                # --- STRATEGIC ALIGNMENT (Placeholders) ---
+                st.markdown("### >> STRATEGIC_ALIGNMENT")
+                strat_col1, strat_col2 = st.columns(2)
+                hedge_placeholder = strat_col1.empty()
+                gap_placeholder = strat_col2.empty()
 
                 # --- DEFERRED HEAVY CALCULATIONS ---
                 if price_hist:

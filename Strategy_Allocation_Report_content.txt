@@ -1,0 +1,67 @@
+
+=== PAGE 1 ===
+Comprehensive Startegy Intelligence Report
+Subject: Portfolio Optimization (ERP vs AlphaMax vs Compounder)
+1. Executive Summary & Verdict
+We tested whether combining the three validated strategies creates a
+better risk-adjusted portfolio than any single strategy alone.
+VERDICT: MARGINAL BENEFIT (+0.03 Sharpe)
+The strategies are highly correlated (>0.60), limiting diversification benefits.
+The optimal portfolio concentrates 60% in AlphaMax and 40% in ERP Regime,
+dropping the Compounder strategy entirely.
+RECOMMENDATION:
+Focus on AlphaMax (The Bedrock) or a simplistic 50/50 split with ERP.
+Do not over-complicate execution with a 3-strategy silo.
+2. Optimal Allocation (Max Sharpe)
+Strategy
+Sharpe
+CAGR
+Vol
+Allocation
+AlphaMax
+1.17
+20.4%
+17.4%
+60%
+ERP Regime
+1.02
+11.4%
+11.2%
+40%
+Compounder
+0.89
+8.7%
+9.7%
+0%
+Portfolio
+1.21
+16.8%
+13.9%
+100%
+3. Correlation Matrix (Why Diversification Failed)
+ERP
+AlphaMax
+Comp
+ERP
+1.00
+0.70
+0.63
+AlphaMax
+0.70
+1.00
+0.80
+Comp
+0.63
+0.80
+1.00
+4. Strategic Conclusion
+1. High Correlation: A correlation of 0.80 between AlphaMax and Compounder
+th
+ff
+ti
+l
+t
+di
+th
+i k f
+t

@@ -171,7 +171,7 @@ class Backtester:
         return results
     
     def _calculate_metrics(self) -> dict[str, Any]:
-        """Calculate performance statistics."""
+        """Calculate performance statistics including Kelly Criterion."""
         equity = pd.Series(self.equity_curve, index=self.dates)
         returns = equity.pct_change().dropna()
         
@@ -187,10 +187,61 @@ class Backtester:
         drawdown = (cumulative - running_max) / running_max
         max_drawdown = drawdown.min()
         
-        # Win rate
-        winning_trades = sum(1 for t in self.trade_log if t['action'] == 'SELL')
-        total_trades = len([t for t in self.trade_log if t['action'] == 'SELL'])
-        win_rate = winning_trades / total_trades if total_trades > 0 else 0
+        # --- FIXED: Proper Win Rate & Kelly Criterion Calculation ---
+        # Track P&L for each completed round-trip trade
+        wins = []
+        losses = []
+        
+        # Match BUY trades with subsequent SELL trades by asset
+        open_positions = {}  # asset -> (entry_price, quantity)
+        
+        for trade in self.trade_log:
+            asset = trade['asset']
+            action = trade['action']
+            price = trade['price']
+            quantity = trade['quantity']
+            
+            if action == 'BUY':
+                # Open or add to position
+                if asset in open_positions:
+                    # Average into position
+                    old_price, old_qty = open_positions[asset]
+                    new_qty = old_qty + quantity
+                    avg_price = (old_price * old_qty + price * quantity) / new_qty
+                    open_positions[asset] = (avg_price, new_qty)
+                else:
+                    open_positions[asset] = (price, quantity)
+                    
+            elif action == 'SELL' and asset in open_positions:
+                # Close position and calculate P&L
+                entry_price, _ = open_positions[asset]
+                pnl_pct = (price - entry_price) / entry_price
+                
+                if pnl_pct > 0:
+                    wins.append(pnl_pct)
+                else:
+                    losses.append(abs(pnl_pct))
+                
+                # Remove position (or reduce if partial - simplified to full close)
+                del open_positions[asset]
+        
+        # Calculate statistics
+        total_trades = len(wins) + len(losses)
+        win_rate = len(wins) / total_trades if total_trades > 0 else 0
+        avg_win = np.mean(wins) if wins else 0
+        avg_loss = np.mean(losses) if losses else 0
+        
+        # Kelly Criterion: K = (p * b - q) / b
+        # Where p = win rate, q = loss rate, b = avg_win / avg_loss
+        if avg_loss > 0 and total_trades > 0:
+            win_loss_ratio = avg_win / avg_loss
+            kelly_criterion = (win_rate * win_loss_ratio - (1 - win_rate)) / win_loss_ratio
+        else:
+            win_loss_ratio = 0
+            kelly_criterion = 0
+        
+        # Half-Kelly (safer position sizing)
+        half_kelly = kelly_criterion / 2
         
         return {
             'total_return': total_return,
@@ -199,7 +250,14 @@ class Backtester:
             'sharpe_ratio': sharpe,
             'max_drawdown': max_drawdown,
             'win_rate': win_rate,
-            'total_trades': len(self.trade_log),
+            'avg_win': avg_win,
+            'avg_loss': avg_loss,
+            'win_loss_ratio': win_loss_ratio,
+            'kelly_criterion': kelly_criterion,
+            'half_kelly': half_kelly,
+            'total_trades': total_trades,
+            'winning_trades': len(wins),
+            'losing_trades': len(losses),
             'final_equity': equity.iloc[-1],
             'equity_curve': equity,
             'trade_log': pd.DataFrame(self.trade_log)

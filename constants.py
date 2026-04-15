@@ -25,6 +25,23 @@ RAW_MATERIAL_KEYWORDS = (
     'ZINC', 'IRON', 'MANGANESE', 'BORON'
 )
 
+# Inventory Reporting Standards (Source of Truth)
+# GL Codes that represent "True Inventory" for valuation
+INVENTORY_GL_CODES = (
+    '12100-00-00', # Raw Materials
+    '12200-00-00', # Finished Goods
+    '12250-00-00', # Packaging
+    '12300-00-00', # Resale Items
+    '12700-00-00', # Work In Progress
+)
+
+# Items explicitly excluded from inventory valuation (Non-inventory, Consignment, Obsolete)
+INVENTORY_EXCLUDED_ITEMS = (
+    'H2OCOLD',      # Non-inventory / Water
+    'CHEGLUCOGR50', # Consignment
+    'GRPAG50Y',     # Obsolete
+)
+
 # Universe of liquid futures for hedging correlation analysis
 FUTURES_UNIVERSE = [
     # --- INDICES & MACRO (The spine of the market) ---

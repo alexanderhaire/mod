@@ -1,0 +1,295 @@
+ITEMNMBR,UOFM,Description,MinCost,MaxCost,AvgCost,TxCount,VendorCount,SpreadPct
+LABELS                         ,Each     ,THRESHOLD CAUTION PLUS                                                                               ,0.10514,4018.29,169.67660785714287,28,3,3821747.0610614414
+SALES TAX                      ,         ,                                                                                                     ,0.19,672.07,15.147868525896413,502,58,353621.05263157893
+INVOICES                       ,Each     ,                                                                                                     ,0.15665,156.65,78.40332500000001,2,1,99899.99999999999
+LABOR CHARGES                  ,each     ,Labor Charges for Repair Work                                                                        ,9.5,6438.0,914.8571428571429,63,8,67668.42105263159
+MISC-FREIGHT CH                ,Each     ,Brenntag                                                                                             ,17.48,8709.0,1133.2045,20,9,49722.654462242564
+PARTS FOR REPAIR               ,Each     ,                                                                                                     ,36.56,16026.96,3244.8807407407407,27,3,43737.41794310721
+FREIGHT                        ,Each     ,                                                                                                     ,4.98,1207.5,66.09434782608696,46,17,24146.987951807227
+SALES TAX                      ,EACH     ,                                                                                                     ,0.49,111.72,14.753387096774194,124,29,22700.0
+GASKETS                        ,Each     ,"1"" VITON GASKETS                                                                                     ",0.35,64.95,11.17,7,2,18457.142857142862
+FLOKTS00                       ,GAL12.30 ,Dyna Flo KTS 0-0-25 17                                                                               ,1.739,280.0,140.8695,2,1,16001.207590569295
+DRUM PUMP                      ,Each     ,                                                                                                     ,4.5,713.2,358.85,2,2,15748.88888888889
+FREIGHT CHARGE                 ,Each     ,                                                                                                     ,8.0,1205.0,138.42666666666665,48,17,14962.5
+MILEAGE CHARGE                 ,Each     ,Round Trip Maileage                                                                                  ,1.2,150.4,20.823076923076922,26,4,12433.333333333336
+"2"" GREEN HOSE                  ",Each     ,100 ft length                                                                                        ,1.08,134.32,61.39425,4,3,12337.037037037035
+ENVIRO CHARGE                  ,         ,                                                                                                     ,0.25,25.0,12.625,2,1,9900.0
+SHIPPING CHARGES               ,Each     ,                                                                                                     ,0.43,37.74,10.415000000000001,6,2,8676.744186046513
+PARTS                          ,Each     ,Repair #17 Forklift                                                                                  ,13.0,994.43,503.715,4,2,7549.461538461539
+SHOP SUPPLIES                  ,each     ,Shop Supplies for Truck Repair                                                                       ,5.5,393.0,84.82933333333334,30,3,7045.454545454545
+LABOR CHARGE                   ,Each     ,2 men for the repair                                                                                 ,60.4,4263.94,640.1314893617022,47,11,6959.503311258279
+MISC PARTS                     ,Each     ,                                                                                                     ,20.0,1399.8,307.116,5,3,6898.999999999999
+PVC FITTINGS                   ,Each     ,                                                                                                     ,8.22,554.75,196.68900000000002,10,3,6648.783454987834
+SURTAX                         ,         ,                                                                                                     ,0.12,6.63,1.2134375,32,2,5425.0
+X3801ENPL                      ,Each     ,LABELING MACHING GLUE                                                                                ,2.2169,109.87,82.7013,13,1,4856.0196671027115
+PIPE FITTINGS                  ,Each     ,                                                                                                     ,13.05,638.5,119.074,15,4,4792.72030651341
+SHIPPING & HANDLING            ,Each     ,                                                                                                     ,3.44,168.13,21.40047619047619,21,10,4787.5
+SHIPPING & HANDLING            ,         ,                                                                                                     ,3.35,137.0,15.659436619718308,71,19,3989.5522388059703
+LABOR FOR TRUCK REPAIR         ,Each     ,Labor charge                                                                                         ,125.0,4500.0,1453.125,8,2,3500.0
+DAVIDCOLE CANAV                ,Each     ,David Cole Canaveral                                                                                 ,23.0,800.0,651.4714285714285,21,1,3378.260869565217
+UPS CHARGES                    ,         ,                                                                                                     ,3.02,99.65,10.809166666666668,24,5,3199.668874172186
+DISPOSAL FEE AND TIRE TAX      ,each     ,Disposal Fee and Tire Tax                                                                            ,7.5,246.5,137.875,8,1,3186.6666666666665
+FREIGHT                        ,         ,                                                                                                     ,3.17,100.0,16.33189655172414,58,23,3054.5741324921137
+LABOR FOR THE REPAIRS          ,Each     ,Trouble shoot problem in control box                                                                 ,125.0,3480.0,1333.75,8,3,2684.0
+FREIGHT CHARGES                ,         ,                                                                                                     ,2.5,65.0,10.15421052631579,19,9,2500.0
+SHIPPING                       ,Each     ,Shipping UPS Ground                                                                                  ,3.79,96.05,24.50576923076923,26,11,2434.300791556728
+SHOP SUPPLIES                  ,Each     ,Shop Supplies                                                                                        ,20.0,500.78,81.77857142857144,28,6,2403.8999999999996
+HARDWARE                       ,Each     ,MIXER  REPAIR                                                                                        ,10.4,257.4,75.02749999999999,4,2,2374.9999999999995
+FUEL SURCHARGE                 ,Each     ,                                                                                                     ,8.5,196.88,73.845,8,2,2216.235294117647
+GRPVIT                         ,LBS      ,Vitamins                                                                                             ,2.79,64.16952,43.70968,3,2,2199.982795698925
+OIL AND FILTER CHANGE          ,each     ,Oil and Filter Change                                                                                ,50.95,1087.83,682.3975,8,1,2035.0932286555444
+ENVIRONMENTAL FEE              ,each     ,Environmental Fee                                                                                    ,12.1,257.52,149.185,8,1,2028.2644628099174
+SHOP SUPPLIES FOR REPAIR       ,Each     ,Cleaner and Supplies                                                                                 ,20.0,420.0,90.16666666666667,12,3,2000.0
+PVC FITTING                    ,Each     ,"3"" SCH 80 CROSS                                                                                      ",1.3,26.9,10.063333333333334,6,1,1969.230769230769
+TIRE DISPOSAL FEE              ,Each     ,Used 11r22.5 - Tanker 32                                                                             ,1.0,20.0,13.666666666666666,3,1,1900.0
+SHIPPING                       ,         ,                                                                                                     ,3.24,64.55,12.957142857142857,28,9,1892.2839506172838
+TQ-1266-K                      ,Each     ,TQ-1266-K ink jet cleaner                                                                            ,14.01,252.18,93.39999999999999,3,1,1700.0
+SHIPPING CHARGES               ,         ,                                                                                                     ,3.56,63.56,11.36,22,7,1685.3932584269664
+PLACARDS                       ,Each     ,corrosive                                                                                            ,1.88,33.51,12.423333333333332,3,1,1682.4468085106382
+LABOR CHARGES                  ,Each     ,                                                                                                     ,105.0,1837.5,903.2142857142857,7,2,1650.0
+LABOR                          ,Each     ,                                                                                                     ,160.0,2796.6,831.3833333333333,12,5,1647.8749999999998
+NO3CA                          ,LBS      ,Calcium Nitrate 11%                                                                                  ,0.10444,1.63774,0.12118393285371704,417,2,1468.1156644963612
+SHIPPING CHARGE                ,Each     ,                                                                                                     ,3.9,56.0,16.14,6,2,1335.897435897436
+LAB SUPPLIES                   ,Each     ,                                                                                                     ,50.4,650.66,350.53,2,1,1190.9920634920634
+SHIPPING&HANDLING              ,         ,                                                                                                     ,4.94,63.59,16.994285714285716,14,10,1187.246963562753
+PIPE                           ,ft       ,ammonia tank                                                                                         ,2.21,27.85,15.030000000000001,2,1,1160.1809954751131
+MISC SUPPLIES FOR REPAIR       ,each     ,"Clamps, hoses, fluids                                                                                ",58.9,731.44,507.26000000000005,3,1,1141.8336162988116
+MISC                           ,each     ,"3"" Van-Stone Flange Sch 80                                                                           ",0.75,9.25,4.5649999999999995,4,1,1133.3333333333335
+MAINT. SUPPLIES                ,Each     ,                                                                                                     ,5.75,69.13,39.431666666666665,6,3,1102.2608695652173
+CROSSTIE REPAIR                ,each     ,Replace Crossties on the CSX Line                                                                    ,250.0,3000.0,1625.0,4,1,1100.0
+RUSSTFREIGHT                   ,Each     ,Russtech freight charges                                                                             ,715.0,8328.0,4521.5,2,1,1064.7552447552448
+FREIGHT TO CDI                 ,Each     ,                                                                                                     ,80.0,900.0,370.0133333333333,6,3,1025.0
+ALL AMER FRT                   ,Each     ,All American Containers Freight                                                                      ,35.0,386.74,100.19333333333333,9,1,1004.9714285714285
+STAPLES                        ,Each     ,SWC7437                                                                                              ,6.33,69.49,37.91,2,1,997.7883096366508
+FREIGHT                        ,EACH5    ,Freight Charge:                                                                                      ,15.87,168.73,45.79454545454546,33,4,963.2010081915563
+DRILL BITS                     ,Each     ,                                                                                                     ,2.5,26.26,14.686666666666667,3,3,950.4000000000001
+MISC                           ,Each     ,                                                                                                     ,20.0,198.68,79.56,3,2,893.4000000000001
+REPAIR                         ,Each     ,"repair, paint trailer                                                                                ",295.0,2862.0,1578.5,2,2,870.1694915254236
+ZZTANKSRESALE                  ,EACH5    ,Tanks for Resale                                                                                     ,129.6,1224.0,758.633,10,2,844.4444444444445
+CHEGLUCO                       ,LBS      ,Sodium Glucoheptonate                                                                                ,0.145,1.32,0.20635359154929578,142,1,810.344827586207
+ARTWORK & PLATES               ,Each     ,                                                                                                     ,59.0,534.0,346.0,3,1,805.0847457627119
+MISC SHOP SUPPLIES CHARGE      ,Each     ,Shop suppliesq                                                                                       ,20.0,178.0,63.1575,8,2,790.0
+FORKLIFT REPAIR                ,Each     ,                                                                                                     ,385.41,3296.6,1841.0049999999999,2,1,755.3488492773929
+REPAIR 5 MINI TANKS            ,Each     ,                                                                                                     ,36.3,309.58,194.46666666666667,6,1,752.8374655647383
+HYDRAULIC HOSE                 ,Each     ,FERTILIZER TRUCK                                                                                     ,50.15,389.84,219.99499999999998,2,2,677.3479561316052
+UPS CHARGE TO CDI              ,Each     ,                                                                                                     ,12.27,95.0,43.5788,25,3,674.2461287693562
+REPAIR FORKLIFT                ,Each     ,MICRONUTRIENT FORKLIFT                                                                               ,182.21,1405.46,500.1825,4,1,671.3407606607759
+DELIVERY CHARGE                ,         ,                                                                                                     ,3.36,25.2,11.543333333333331,6,2,650.0
+FREIGHT CHARGES                ,Each     ,                                                                                                     ,5.5,40.0,11.568181818181818,11,4,627.2727272727273
+UPS SHIPPING                   ,         ,                                                                                                     ,5.15,35.69,20.419999999999998,2,1,593.009708737864
+DAVIDCOLE                      ,Each     ,"David Cole Trucking, Inc.                                                                            ",237.04,1620.5,479.76102564102564,39,1,583.63989200135
+STETT                          ,Each     ,"Stett Transportation, Inc.                                                                           ",1000.0,6800.0,4040.296296296296,27,2,580.0
+EKD-10 ELEMENT FILTER          ,Each     ,FOR FILING MACHINE                                                                                   ,13.1,88.93,51.015,2,1,578.8549618320612
+REPAIR #1 HITCH HIKER          ,Each     ,                                                                                                     ,55.0,344.01,199.505,2,1,525.4727272727273
+CHEH2SO4                       ,LBS      ,Sulfuric Acid Baume 93%                                                                              ,0.105,0.627,0.26839379310344824,29,3,497.14285714285717
+AMMONIA FILTERS                ,Each     ,                                                                                                     ,8.75,51.12,29.935,2,2,484.22857142857134
+NPKKNO3                        ,LBS      ,Potassium Nitrate Soluble                                                                            ,0.11,0.63,0.34097735849056604,265,4,472.72727272727275
+SO4MOLY                        ,LBS      ,Moly 39.6%                                                                                           ,2.14,12.1,8.475698181818181,11,2,465.42056074766344
+ANTIFREEZE                     ,each     ,Antifreeze for trucks                                                                                ,22.735,125.86,57.10999999999999,3,1,453.5957774356719
+CHEMOLASS                      ,LBS      ,Molasses                                                                                             ,0.1033,0.56375,0.22312375,8,1,445.7405614714424
+SHIPPING CHARGE                ,         ,                                                                                                     ,3.61,18.12,7.1819999999999995,5,2,401.9390581717453
+ENVIRONMENTAL CHARGE           ,         ,                                                                                                     ,0.25,1.25,0.75,2,1,400.0
+MOTOR BRUSHES                  ,SETS     ,11&12C                                                                                               ,10.1,50.0,30.05,2,2,395.049504950495
+STAPLES (ROLL) SWC743/581M     ,CASE     ,                                                                                                     ,50.0,240.83,145.41500000000002,2,1,381.66
+"3"" MALE ADAPTOR                ",Each     ,Sch 40 PVC Slip x Male IPT                                                                           ,1.92,8.87,5.395,2,2,361.97916666666663
+GRPFISHEM                      ,LBS      ,Omega Grow Fish Emulsion Protein 5-1-1                                                               ,0.16,0.73152,0.45117199999999996,5,1,357.2
+LABOR FOR SERVICE              ,Each     ,PM all 3 air compressors and install Air Dryer                                                       ,110.0,500.0,203.0,10,4,354.54545454545456
+ZZLIDSVENTED                   ,EACH5    ,Vented Lids                                                                                          ,0.3182,1.39635,0.5032099999999999,6,2,338.8277812696417
+BRAKE REPAIR                   ,each     ,Brake Repair                                                                                         ,252.61,1103.83,678.22,4,1,336.97003285697315
+UPS GROUND                     ,Each     ,ups ground charge                                                                                    ,15.72,68.56,42.14,4,2,336.1323155216285
+NPKU32                         ,LBS      ,Urea Ammonium Nitrate 32%                                                                            ,0.102,0.44,0.16140736111111112,72,6,331.37254901960785
+NPKAQUA                        ,LBS      ,Aqua Ammonia 23%                                                                                     ,0.1022,0.44,0.16232648648648648,74,5,330.52837573385517
+SO4BORON                       ,LBS      ,Boron                                                                                                ,0.2,0.85001,0.6126006666666667,15,3,325.005
+TIRE REPLACEMENT               ,Each     ,Drive Tire For #1 Hitch Hiker                                                                        ,84.16,357.34,220.75,2,1,324.5960076045627
+SLIP SHEETS                    ,Each     ,1 PALLET @ 3000                                                                                      ,289.42,1224.46,953.57,4,2,323.073733674245
+GRPGABA                        ,LBS      ,GABA                                                                                                 ,4.71736,19.5,8.5802625,16,1,313.3667983787542
+SO4BORIC                       ,LBS      ,Boric Acid - 17.4%  Dry                                                                              ,0.15003,0.6154,0.4092665909090909,44,4,310.1846297407185
+TEFLON TAPE                    ,Each     ,                                                                                                     ,1.0,4.06,2.53,2,2,305.99999999999994
+"18"" HAND STRETCH WRAP          ",Each     ,                                                                                                     ,6.9,28.0,17.35,4,1,305.7971014492754
+WINDOW ENVELOPES               ,Each     ,2500 each                                                                                            ,39.5,159.91,106.75999999999999,3,2,304.8354430379747
+FILTER PAPER                   ,Each     ,                                                                                                     ,8.3,33.29,20.795,2,1,301.0843373493975
+PALLETS                        ,Each     ,                                                                                                     ,3.0,12.0,4.1475,40,3,300.0
+UPS CHARGES                    ,Each     ,                                                                                                     ,13.89,55.51,29.896666666666665,3,1,299.6400287976961
+SHIP TO CDI BY UPS             ,Each     ,                                                                                                     ,11.72,46.0,25.324,5,1,292.49146757679176
+NPKUREA                        ,LBS      ,Urea Dry  46% 1 Ton Bags                                                                             ,0.1025,0.395,0.21850000000000003,44,4,285.36585365853665
+TRAVEL                         ,Each     ,$60 minimum for service truck travel                                                                 ,60.0,230.0,145.0,4,2,283.33333333333337
+REPAIR BULKHEAD                ,Each     ,PHOS ACID TANK FERT.                                                                                 ,133.95,508.25,321.1,2,1,279.4326241134752
+DELIVERY CHARGES               ,         ,                                                                                                     ,4.37,16.58,10.483333333333333,3,1,279.4050343249427
+ZZ5GAL                         ,EACH5    ,5 Gallon Pail                                                                                        ,1.38663,5.22,2.0103252,25,5,276.4522619588498
+SO4CU                          ,LBS      ,Copper Sulphate 25.2%                                                                                ,0.52,1.9531,0.9901722222222222,18,3,275.59615384615387
+PLANNER REFILLS                ,Each     ,21889                                                                                                ,26.5,94.96,42.044285714285714,7,1,258.33962264150944
+BOLTS                          ,Each     ,                                                                                                     ,9.4,32.39,20.895,2,1,244.5744680851064
+MISCHCL                        ,LBS      ,Hydrochloric Acid                                                                                    ,0.105,0.36,0.16972222222222222,9,2,242.8571428571429
+PARTS FOR REPAIR WORK (MISC)   ,each     ,Misc. parts for Safety Certification                                                                 ,679.69,2266.89,1473.29,4,2,233.51822154217362
+FLANGE                         ,Each     ,"8"" 150# Blind (Cast Iron)                                                                            ",8.32,27.56,17.939999999999998,2,1,231.24999999999994
+48X40 PALLETS                  ,Each     ,                                                                                                     ,2.75,9.0,3.1318181818181823,44,4,227.27272727272728
+NPKPHOS75                      ,LBS      ,Phosphoric Acid 75%                                                                                  ,0.17,0.5525,0.2976394230769231,52,4,224.99999999999994
+SO4MN                          ,LBS      ,Tech Magnum Manganses Sulfate                                                                        ,0.1975,0.64,0.29675,10,3,224.0506329113924
+ZZ2.5GALF                      ,EACH5    ,2.5 F-style Jug/Box combo                                                                            ,1.39694,4.258,2.7954324615384616,65,4,204.80908270935046
+NPK11370                       ,LBS      ,Ammonium Poly Phosphate 11-37-0                                                                      ,0.1075,0.325,0.2240078947368421,19,3,202.32558139534888
+MAINT.SUPPLIES                 ,Each     ,                                                                                                     ,41.32,124.59,65.1557142857143,7,3,201.52468538238142
+AIRLINE FITTINGS               ,Each     ,                                                                                                     ,1.58,4.7,3.14,2,1,197.46835443037975
+GAUNTLET                       ,Each     ,5HA71                                                                                                ,4.48,13.29,8.885,2,1,196.65178571428567
+NPKKSO4                        ,LBS      ,Potassium Sulphate 0-0-50                                                                            ,0.2324,0.6888,0.45956571428571424,7,3,196.3855421686747
+DELIVERY CHARGE TO CDI         ,Each     ,                                                                                                     ,25.0,73.86,44.544,5,2,195.44
+NPKKTS                         ,LBS      ,Potassium Thiosulfate 0-0-25 17 KTS                                                                  ,0.14,0.40539,0.23735809523809523,63,5,189.5642857142857
+GRPASCORBIC                    ,LBS      ,Ascorbic Acid Dry                                                                                    ,3.75,10.66973,6.908557999999999,5,2,184.52613333333332
+NPK0030CDI                     ,LBS      ,Dyna Flo 0-0-30 Potassium Carbonate                                                                  ,0.31887,0.9,0.6063259999999999,5,2,182.2466836014677
+ZZ30GAL                        ,EACH5    ,30 Gallon Drum                                                                                       ,9.0,25.0,15.357929242424243,66,3,177.77777777777777
+NPKMKP                         ,LBS      ,Mono Potassium Phosphate                                                                             ,0.185,0.51,0.38642857142857145,7,3,175.67567567567568
+SWITCH                         ,Each     ,                                                                                                     ,9.07,25.0,17.035,2,2,175.63395810363835
+SUSPENSION LEVELING DEVICE     ,each     ,Replace Suspension Leveling Device                                                                   ,146.21,395.82,271.015,4,1,170.72019697695094
+"2""QUICK COUPLING               ",Each     ,PART B                                                                                               ,3.029,8.164,5.288399999999999,15,1,169.52789699570815
+MISC. FEES                     ,each     ,Miscelaneous Fees                                                                                    ,18.0,48.0,37.5,6,1,166.66666666666669
+DISPOSAL FEE                   ,Each     ,                                                                                                     ,7.5,20.0,16.571428571428573,14,1,166.66666666666669
+MISCDEFOAM                     ,LBS      ,Defoamer                                                                                             ,2.19067,5.785,3.353352142857143,14,1,164.07446123788614
+BRASS FITTINGS                 ,Each     ,                                                                                                     ,9.9,26.08,17.99,2,2,163.43434343434342
+ARTWORK PROOF                  ,Each     ,                                                                                                     ,85.0,223.86,154.43,2,1,163.36470588235298
+SERVICE CALL                   ,Each     ,                                                                                                     ,95.0,250.0,141.66666666666666,12,4,163.1578947368421
+"3"" FLANGE                      ",Each     ,                                                                                                     ,8.97,23.6,15.74475,4,3,163.09921962095873
+"3"" VALVES                      ",Each     ,                                                                                                     ,70.18,183.65,123.0375,4,3,161.6842405243659
+NO3MG63                        ,LBS      ,Magnesium Nitrate 6.3%                                                                               ,0.11116,0.29082,0.21983625,32,3,161.62288593019076
+REPAIR SCALE                   ,Each     ,ALSO CALIBRATE                                                                                       ,365.43,944.81,656.6533333333333,3,1,158.547464630709
+NEW 11R22.5                    ,Each     ,New 11r22.5                                                                                          ,348.72,901.32,532.9200000000001,3,1,158.46524432209222
+NPKKCL62                       ,LBS      ,Muriate of Potash                                                                                    ,0.15214,0.39,0.18831454545454546,88,4,156.34284211910082
+TRAVEL TIME                    ,each     ,Travel time to the job                                                                               ,90.0,230.0,195.0,8,2,155.55555555555557
+CHECITRIC                      ,LBS      ,Citric Acid                                                                                          ,0.45,1.15,0.6087446808510638,47,9,155.55555555555554
+"1"" BALL VALVE                  ",Each     ,                                                                                                     ,3.89,9.9,6.8950000000000005,2,1,154.4987146529563
+NO3ZN                          ,LBS      ,Zinc Nitrate 17%                                                                                     ,0.2775,0.7,0.5794434782608696,92,3,152.25225225225222
+HOSE CLAMPS                    ,Each     ,                                                                                                     ,16.13,40.31,28.22,2,2,149.90700557966525
+DAVIDCOLE 3                    ,Each     ,Jesse Cole flat rate                                                                                 ,338.91,844.2,446.622,5,1,149.0926794724263
+GRPSEAWEED                     ,LBS      ,Soluble Seaweed Extract                                                                              ,1.98,4.9318,4.439024,15,2,149.08080808080808
+ZZ250GAL                       ,EACH5    ,250 Gallon IBC                                                                                       ,75.0,185.0,118.1504762,150,6,146.66666666666666
+SO4MN32                        ,LBS      ,manganese sulfate 32%                                                                                ,0.215,0.53,0.36453370370370375,27,5,146.51162790697677
+SPRAYER NOZZLES                ,Each     ,low anaylisis truck                                                                                  ,5.0,12.21,8.605,2,1,144.20000000000002
+MISC SUPPLIES TO REPAIR        ,Each     ,COMPRESSOR                                                                                           ,20.51,49.87,35.19,2,1,143.14968308142366
+SNAP RING PLIERS               ,Each     ,                                                                                                     ,12.83,30.95,21.89,2,1,141.2314886983632
+LABEL GLUE                     ,lbs      ,V3869EN                                                                                              ,0.97,2.313,2.0918571428571426,7,2,138.4536082474227
+ASSORTED STAMPS 0-9            ,Each     ,micro                                                                                                ,7.0,16.0,11.5,2,1,128.57142857142858
+DELIVERY CHARGE                ,Each     ,                                                                                                     ,4.2,9.6,6.9,2,1,128.57142857142856
+SHIPPING&HANDLING              ,Each     ,                                                                                                     ,5.52,12.54,8.25,3,3,127.17391304347827
+REPAIR BLENDING TANK           ,each     ,Weld Repair Work on Blending Tank                                                                    ,320.0,725.0,522.5,4,1,126.5625
+MISCNAOH                       ,LBS      ,Sodium Hydroxide (dry caustic soda)                                                                  ,0.2,0.45,0.3022058823529412,34,4,125.0
+NPKKOHDRY                      ,LBS      ,Potassium Hydroxide KOH Dry 90%                                                                      ,0.385,0.85,0.5177998333333333,60,8,120.77922077922076
+NO3MN                          ,LBS      ,Manganese Nitrate 15                                                                                 ,0.25,0.55,0.41201183333333335,60,6,120.00000000000001
+PH PROBE                       ,Each     ,                                                                                                     ,169.2,371.85,270.525,2,2,119.76950354609932
+ZZ55GAL                        ,EACH5    ,55 Gallon Drum                                                                                       ,12.0,26.33333,18.91685528301887,53,3,119.44441666666667
+AIR FILTER FOR COMPRESSOR      ,Each     ,PEN16C Air filter for MICRO Air Compressor                                                           ,19.6,42.5,31.05,4,1,116.83673469387755
+"2"" 90 DEG BANJO FITTINGS       ",Each     ,                                                                                                     ,4.64,10.03,7.334999999999999,2,1,116.16379310344828
+2X1 RED BUSHING 3/5            ,Each     ,                                                                                                     ,1.3,2.78,2.04,2,1,113.84615384615383
+MUFFLER                        ,Each     ,                                                                                                     ,22.26,47.07,34.665,2,2,111.45552560646898
+NPKUREA50                      ,LBS      ,Urea 46% Dry 50 lb. bags                                                                             ,0.105,0.22134,0.15281555555555557,9,3,110.80000000000001
+ZZ2.5GALFFL                    ,EACH5    ,2.5 Gallon Squat Solo Jug                                                                            ,1.63,3.42902,1.9051896666666666,60,1,110.36932515337425
+EDTAFEHE                       ,LBS      ,Iron HEDTA 4.5% Liquid                                                                               ,0.80995,1.63768,1.040842380952381,21,3,102.1951972343972
+FREIGHT TO CDI TOTAL           ,Each     ,                                                                                                     ,69.28,139.31,92.73,6,2,101.08256351039262
+GRPMZ63                        ,LBS      ,Goemar MZ 63                                                                                         ,1.36792,2.73585,1.4791688235294118,17,3,100.00073103690275
+USLOGISOK                      ,Each     ,US Logistic Oklahoma                                                                                 ,1300.0,2600.0,1950.0,2,1,100.0
+PLATE CHANGE CHARGE            ,each     ,Change the Plate Charge                                                                              ,5.0,10.0,9.666666666666666,30,1,100.0
+NO3FE                          ,LBS      ,Iron Nitrate 10%                                                                                     ,0.24,0.48,0.3787223287671233,73,3,100.0
+ZZ2.5GAL                       ,EACH5    ,2.5 Gallon  Jug Squat                                                                                ,1.23455,2.44469,1.5877750588235295,85,7,98.02276133003929
+TOTE - CLEANED & REPAIR        ,Each     ,Cleaned & Pallet Replaced                                                                            ,35.0,69.0,52.0,2,1,97.14285714285714
+SIZE #8 STEEL TOE BOOT         ,Each     ,#3MDR8 Honeywell Boots                                                                               ,22.62,44.18,30.820000000000004,6,1,95.31388152077807
+FUEL SURCHAGE                  ,Each     ,                                                                                                     ,35.0,67.5,51.25,8,2,92.85714285714286
+SPLITTER VALVE                 ,each     ,Splitter Valve                                                                                       ,189.26,361.24,275.25,4,1,90.8697030539998
+CHEMONETH                      ,LBS      ,Monoethanolamine MEA                                                                                 ,0.65,1.23899,0.8001093333333333,15,4,90.61384615384615
+MISC. ITEMS                    ,Each     ,                                                                                                     ,26.96,51.33,39.144999999999996,2,2,90.39317507418396
+CHESORB                        ,LBS      ,Sorbitol 70%                                                                                         ,0.275,0.52,0.37833333333333335,9,3,89.0909090909091
+"3"" BALL VALVE                  ",Each     ,                                                                                                     ,47.28,88.35,62.88199999999999,5,2,86.86548223350252
+PLASTIC SHIMS                  ,Each     ,                                                                                                     ,3.21,5.94,4.575,2,1,85.04672897196262
+MISCGLYCEROL                   ,LBS      ,Glycerol                                                                                             ,0.54,0.9957,0.79374,40,5,84.38888888888889
+"2"" BALL VALVES                 ",Each     ,MACRO                                                                                                ,18.77,34.55,26.659999999999997,2,2,84.07032498668087
+NPKPHOS85                      ,LBS      ,Phosphoric Acid 85%                                                                                  ,0.46297,0.845,0.57498375,16,2,82.51722573816878
+PAINTING SUPPLIES              ,Each     ,BUILDING MAINT.                                                                                      ,43.53,77.6,58.836666666666666,3,1,78.26786124511828
+NO3CABG                        ,LBS      ,Calcium Nitrate 11% 50 lb. Bags                                                                      ,0.135,0.24,0.205,3,1,77.77777777777776
+LOVEJOY COUPLING               ,Each     ,fert. mixer                                                                                          ,70.07,123.77,96.91999999999999,2,1,76.63764806621951
+MISCOIL02                      ,GAL07.00 ,Spray Oil UAP                                                                                        ,2.07,3.65,2.249222222222222,9,1,76.32850241545894
+"2"" 90DEG PVC ELL               ",Each     ,Sch 80 Soc.x Soc.                                                                                    ,1.6,2.8,2.2,2,1,74.99999999999997
+SO4MG                          ,LBS      ,Magnesium Sulphate 19.8%                                                                             ,0.195,0.3407,0.24318333333333333,12,3,74.71794871794872
+TANKS FOR RESALE               ,Each     ,                                                                                                     ,1515.97,2611.87,1972.7166666666665,3,1,72.2903487536033
+NO3MG60                        ,LBS      ,Magnesium Nitrate 6%                                                                                 ,0.11485,0.19709,0.1529936974789916,119,2,71.60644318676535
+NPK2800                        ,LBS      ,N-Sure 28-0-0 --  N28                                                                                ,0.27051,0.4632,0.31824425531914896,47,3,71.23211711212156
+OXZN                           ,LBS      ,Zinc Oxide                                                                                           ,0.54,0.92,0.668,5,2,70.37037037037037
+LABOR - TRAVEL                 ,Each     ,Service call on-site                                                                                 ,67.5,115.0,83.33333333333333,3,2,70.37037037037037
+AIR REGULATORS                 ,Each     ,                                                                                                     ,24.2,41.17,32.685,2,2,70.12396694214877
+"1"" PVC CLEAR HOSE              ",Each     ,PVC 115 Clear Suction Hose                                                                           ,1.5,2.54,2.124,5,1,69.33333333333334
+GRPFULVICDRY                   ,LBS      ,Fulvic Acid 75% Dry                                                                                  ,2.31788,3.91228,2.848445,4,1,68.78699501268399
+"3"" GASKETS                     ",Each     ,                                                                                                     ,0.815,1.37,1.075,4,3,68.09815950920249
+"20"" STRETCH WRAP               ",Each     ,                                                                                                     ,23.0,38.0,29.77,5,2,65.21739130434783
+NO3CU                          ,LBS      ,Copper Nitrate 14%                                                                                   ,0.78687,1.3,0.8809391999999999,25,2,65.21153430681053
+TRAVEL TIME                    ,Each     ,Test Truck minimum mileage                                                                           ,140.0,230.0,200.0,6,2,64.28571428571429
+OXMG                           ,LBS      ,Magnesium Oxide 98%                                                                                  ,0.26,0.425,0.355,9,4,63.461538461538446
+MAINT SUPPLIES                 ,Each     ,                                                                                                     ,67.67,109.57,89.145,4,2,61.91813211171861
+NPKATS                         ,LBS      ,Ammonium Thiosulphate 12-0-0 26                                                                      ,0.1552,0.24962,0.2063691666666667,12,1,60.83762886597939
+UPS RED DELIVERY               ,Each     ,                                                                                                     ,106.04,169.0,137.52,4,2,59.37382119954733
+SO4EPSOM                       ,LBS      ,Epsom Salt 9.8%                                                                                      ,0.145,0.23,0.17625000000000002,10,5,58.620689655172434
+ZZ5GALCAMO                     ,EACH5    ,5 Gallon Camo Pail                                                                                   ,3.45,5.41,4.460909090909091,11,2,56.811594202898554
+GRPFULVIC                      ,LBS      ,Fulvic Acid Liquid 30%                                                                               ,1.61363,2.52953,2.343264285714286,7,2,56.76022384313628
+JRM FERROMAN (JUG LABEL)       ,Each     ,JRM Ferroman (1000 rl)                                                                               ,0.12683,0.197,0.161915,4,1,55.32602696522906
+JRM FERROMAN (CASE LABEL)      ,Each     ,JRM Ferroman (1000 rl)                                                                               ,0.12683,0.197,0.17361000000000001,3,1,55.32602696522906
+UPS CJARGE TO CDI              ,Each     ,                                                                                                     ,46.22,71.13,61.175,4,1,53.89441800086542
+"1"" DIAPHRAM PUMP               ",Each     ,MICRO                                                                                                ,510.37,778.94,644.655,2,1,52.62260712816194
+"CROSS 3""                       ",Each     ,                                                                                                     ,17.51,26.67,22.090000000000003,2,1,52.31296402055967
+CL2CADRY                       ,LBS      ,Calcium Chloride Dry                                                                                 ,0.165,0.25,0.20451666666666668,12,2,51.5151515151515
+TIRE REPAIR                    ,Each     ,SERVICE CALL FOR FLAT TIRE                                                                           ,38.0,57.5,47.75,2,1,51.31578947368421
+48X48 PALLETS                  ,Each     ,                                                                                                     ,6.0,9.0,8.1875,8,3,50.0
+"3"" 90 DEG ELL                  ",Each     ,                                                                                                     ,5.412,8.046,6.728999999999999,2,2,48.66962305986695
+SUMP PUMP                      ,Each     ,                                                                                                     ,182.17,269.71,237.37600000000003,5,1,48.05401548004611
+NPKNPHURCDI                    ,LBS      ,pHury 15-0-0-16                                                                                      ,0.19921,0.293,0.22720785714285713,28,1,47.080969830831776
+ZZ2.5GALCASE                   ,EACH5    ,2.5 Gallon Case Squat - Box Only                                                                     ,1.25,1.837,1.6093234375,32,2,46.959999999999994
+ZZ2.5GALTALL                   ,EACH5    ,2.5 Gallon Tall F Solo Jug                                                                           ,1.66,2.42252,1.9123964864864864,37,2,45.934939759036155
+PAPER TOWELS                   ,Each     ,                                                                                                     ,23.1,33.5,25.419999999999998,5,2,45.021645021645014
+GRPHUMICLIQ                    ,LBS      ,Humic Acid Liquid-Borresol 22%                                                                       ,0.39062,0.56458,0.493764,20,1,44.53433003942449
+SO4FEDRY                       ,LBS      ,                                                                                                     ,0.1105,0.158,0.11427695652173912,23,2,42.98642533936652
+PACKING TOOL                   ,Each     ,                                                                                                     ,8.5,12.04,10.35,3,1,41.647058823529406
+REPAIR HYD HOSES ON            ,Each     ,BOBCAT                                                                                               ,193.36,272.3,232.83,2,1,40.825403392635494
+OXYGEN                         ,Each     ,                                                                                                     ,14.6,20.54,17.57,2,1,40.68493150684932
+SAFETY SUPPLIES                ,Each     ,                                                                                                     ,121.27,167.97,144.62,2,1,38.5091118990682
+MAGNET                         ,Each     ,                                                                                                     ,26.62,36.74,31.68,2,1,38.01652892561984
+AIR VALVES                     ,Each     ,                                                                                                     ,39.55,54.39,46.48,3,1,37.52212389380532
+ZZLIDSCAMO                     ,EACH5    ,Camo Lids for 50 LB Buckets                                                                          ,1.61,2.2,1.8944444444444446,9,2,36.64596273291926
+SO4ZNSTD                       ,LBS      ,Zinc Sulphate 35.5%                                                                                  ,0.51,0.693,0.5647416666666666,6,4,35.88235294117646
+CHEGLUCOGR50CDI                ,LBS      ,Sodium Glucoheptonate / GR-50 NVM purchased by CDI                                                   ,0.31,0.42,0.35945945945945945,37,1,35.48387096774193
+TIRE SEALER                    ,Each     ,Left Handed Inner Stud                                                                               ,10.12,13.7,11.91,4,1,35.37549407114625
+NPKKNO3BG                      ,LBS      ,Potassium Nitrate Dry Bags                                                                           ,0.1925,0.26,0.20328125,16,4,35.064935064935064
+EDTAMG                         ,LBS      ,Magnesium EDTA 2.5%                                                                                  ,0.65171,0.87632,0.7747033333333334,6,2,34.46471590124441
+GRPAMINO                       ,LBS      ,Amino Acids                                                                                          ,2.87037,3.85632,3.5989039999999997,15,1,34.34923023861037
+ZZLIDS                         ,EACH5    ,Lids for 5 Gallon Pails                                                                              ,0.75,1.00008,0.9050905263157895,19,3,33.344000000000015
+MILEAGE                        ,Each     ,                                                                                                     ,1.5,2.0,1.75,4,2,33.33333333333333
+COPY PAPER WHITE               ,Each     ,White Copy Paper                                                                                     ,41.49,55.19,48.34,4,1,33.02000482043865
+MISCH2O2                       ,LBS      ,Hydrogen Peroxide 32%                                                                                ,0.317,0.4205,0.3889545454545455,11,2,32.649842271293366
+SO4MN50                        ,LBS      ,Manganese Sulfate 31.5% 50 lb. bags                                                                  ,0.215,0.285,0.23863636363636365,11,2,32.558139534883715
+PLANNER REFILL                 ,Each     ,STAN                                                                                                 ,26.95,35.63,33.0075,4,1,32.20779220779222
+SHOP EXPENSES                  ,each     ,Shop Expenses                                                                                        ,45.04,59.5,52.269999999999996,4,1,32.10479573712256
+THIOCACDI                      ,LBS      ,Calcium Thiosulfate                                                                                  ,0.25323,0.33261,0.2610133333333334,15,1,31.34699680132686
+USLOGISTIC                     ,Each     ,Us Logistic                                                                                          ,1300.0,1700.0,1425.0,10,1,30.76923076923077
+SERVICE CALL ON THE ROAD       ,each     ,Road Call Service Call                                                                               ,79.5,103.5,94.0,14,2,30.18867924528302
+OXMN                           ,LBS      ,Manganous Oxide                                                                                      ,3.59091,4.63946,4.2049575,4,1,29.20011918984323
+SAWZALL BLADES                 ,Each     ,                                                                                                     ,11.47,14.76,13.115,2,1,28.68352223190932
+PALLET CHARGE                  ,each     ,Pallet Charge                                                                                        ,14.0,18.0,15.703703703703704,27,1,28.57142857142857
+GRPHUMICDRY                    ,LBS      ,Humic Acid Dry                                                                                       ,2.15,2.75,2.45,2,1,27.906976744186053
+NOLANTRANSPORT                 ,Each     ,Nolan Transportation Group                                                                           ,1300.0,1650.0,1523.3333333333333,12,1,26.923076923076923
+"2"" SCH80 MALE ADPT             ",each     ,"3836S020 Sch80 2"" Male Adpt                                                                          ",11.448,14.5105,12.97925,4,1,26.75139762403913
+"3"" SCH80 90 DEG ELBOW SXS      ",each     ,"3806S030 Sch82 3"" 90 deg Elbow SxS                                                                   ",10.9537,13.8822,11.77226,10,1,26.73525840583547
+"3"" SCH80 PVC CPLG SXS          ",each     ,"3829S030 Sch80 3"" CPLG SxS                                                                           ",14.6507,18.564,16.314133333333334,6,1,26.710669114786324
+LIQUID ADHESIVE HBF V3869EN001 ,Each     ,                                                                                                     ,2.06,2.61,2.40253,4,1,26.69902912621358
+REPAIRS PER ATTACHED           ,Each     ,#1 HITCH HIKER                                                                                       ,525.06,663.57,614.4533333333334,3,1,26.37984230373674
+QUALITY AL                     ,Each     ,Quality Alabama                                                                                      ,1974.84,2490.9,2232.87,2,1,26.13173725466368
+"2"" PART E POLY Q.D. CPLG       ",Each     ,                                                                                                     ,2.125,2.67,2.3975,2,1,25.647058823529406
+DELIVERY                       ,Each     ,Delivery charge                                                                                      ,50.0,62.77,55.92333333333334,6,3,25.540000000000006
+"2"" CLEAR TAPE                  ",Each     ,                                                                                                     ,0.94,1.18,1.06,2,2,25.53191489361702
+"4"" FEMALE ADAPTOR              ",Each     ,                                                                                                     ,18.03,22.63,20.33,2,1,25.513033832501375
+HYDROLIC OIL (1 GAL)           ,each     ,R?O Hydraulic Oil (1 gal)                                                                            ,27.48,33.99,31.186,10,2,23.689956331877735
+"PNEUMATIC BFV 3"" PVC EPDM      ",Each     ,#37602580088/ Quote# 6669677                                                                         ,658.97,814.98,736.975,2,1,23.674825864606884
+VG-212-8-38                    ,each     ,"Adjusting Rod SS 1/2 x 8""                                                                            ",21.29,26.31,24.636666666666667,3,1,23.579145138562705
+GLOVE LINERS                   ,Each     ,                                                                                                     ,1.78,2.19,1.9849999999999999,2,1,23.033707865168534
+NEUTRA SOIL  (FLAT)            ,each     ,Neutra Soil  (Flat)                                                                                  ,0.1453,0.1785,0.16743333333333332,3,1,22.849277357192
+ULTRA GREEN  (FLAT)            ,each     ,Ultra Green  (Flat)                                                                                  ,0.1455,0.1785,0.16749999999999998,3,1,22.68041237113402
+SUPERNUS AZ                    ,Each     ,Supernus Arizona                                                                                     ,2300.0,2800.0,2550.0,2,1,21.73913043478261
+"4"" FLANGES                     ",Each     ,                                                                                                     ,11.34,13.799,12.5695,2,2,21.684303350970012
+"4"" FLANGE                      ",Each     ,                                                                                                     ,11.35,13.8,12.166666666666666,3,2,21.58590308370045
+"3"" FLANGES                     ",Each     ,                                                                                                     ,8.97,10.901,9.935500000000001,2,2,21.52731326644369
+SO4ZN                          ,LBS      ,Zinc Sulphate                                                                                        ,0.28,0.34,0.30303571428571424,14,3,21.428571428571423
+4X3 RED BUSH                   ,Each     ,                                                                                                     ,18.039,21.9,19.9695,2,2,21.4036254781307
+11R22.5 RECAP TIRE             ,Each     ,Recap Tire 11R22.5                                                                                   ,235.22,285.06,260.14,4,2,21.188674432446224
+MIRROR                         ,Each     ,                                                                                                     ,21.62,26.12,23.2625,4,1,20.814061054579092
+4X8 PLYWOOD                    ,Each     ,                                                                                                     ,14.97,17.99,16.48,2,1,20.173680694722762

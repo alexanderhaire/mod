@@ -1,0 +1,222 @@
+======================================================================
+CHEMICAL PRICING CORRELATION REPORT
+Weird Data vs. Chemical Procurement Costs
+Generated: 2026-01-15 09:34
+======================================================================
+
+Found 118 significant correlation(s):
+
+
+──────────────────────────────────────────────────
+ITEM: NO3FE
+──────────────────────────────────────────────────
+  cheese_consumption        | r=+0.962 ^ | p=0.0000 | R2=0.926 (Lag 1y)
+  cheese_consumption        | r=+0.959 ^ | p=0.0000 | R2=0.920
+  butter_consumption        | r=+0.956 ^ | p=0.0000 | R2=0.913
+  netflix_subscribers       | r=+0.953 ^ | p=0.0000 | R2=0.908
+  butter_consumption        | r=+0.952 ^ | p=0.0000 | R2=0.907 (Lag 1y)
+  netflix_subscribers       | r=+0.944 ^ | p=0.0000 | R2=0.891 (Lag 1y)
+  starbucks_stores          | r=+0.941 ^ | p=0.0000 | R2=0.886
+  starbucks_stores          | r=+0.937 ^ | p=0.0000 | R2=0.878 (Lag 1y)
+  avocado_consumption       | r=+0.887 ^ | p=0.0000 | R2=0.788 (Lag 1y)
+  avocado_consumption       | r=+0.829 ^ | p=0.0001 | R2=0.688
+  national_park_visits      | r=+0.524 ^ | p=0.0450 | R2=0.275
+  chicken_consumption       | r=+0.511 ^ | p=0.0516 | R2=0.261
+
+──────────────────────────────────────────────────
+ITEM: CHEGLUCO
+──────────────────────────────────────────────────
+  butter_consumption        | r=+0.913 ^ | p=0.0000 | R2=0.833
+  avocado_consumption       | r=+0.902 ^ | p=0.0000 | R2=0.813
+  starbucks_stores          | r=+0.887 ^ | p=0.0000 | R2=0.787
+  butter_consumption        | r=+0.881 ^ | p=0.0000 | R2=0.776 (Lag 1y)
+  cheese_consumption        | r=+0.881 ^ | p=0.0000 | R2=0.776 (Lag 1y)
+  starbucks_stores          | r=+0.870 ^ | p=0.0001 | R2=0.756 (Lag 1y)
+  netflix_subscribers       | r=+0.860 ^ | p=0.0000 | R2=0.740
+  cheese_consumption        | r=+0.858 ^ | p=0.0000 | R2=0.735
+  netflix_subscribers       | r=+0.848 ^ | p=0.0001 | R2=0.719 (Lag 1y)
+  avocado_consumption       | r=+0.817 ^ | p=0.0004 | R2=0.667 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: NO3MN
+──────────────────────────────────────────────────
+  cheese_consumption        | r=-0.907 v | p=0.0000 | R2=0.822 (Lag 1y)
+  netflix_subscribers       | r=-0.893 v | p=0.0000 | R2=0.797 (Lag 1y)
+  starbucks_stores          | r=-0.884 v | p=0.0000 | R2=0.781 (Lag 1y)
+  beef_consumption          | r=-0.841 v | p=0.0001 | R2=0.707
+  butter_consumption        | r=-0.824 v | p=0.0003 | R2=0.679 (Lag 1y)
+  netflix_subscribers       | r=-0.774 v | p=0.0007 | R2=0.600
+  cheese_consumption        | r=-0.750 v | p=0.0013 | R2=0.563
+  avocado_consumption       | r=-0.715 v | p=0.0041 | R2=0.511 (Lag 1y)
+  starbucks_stores          | r=-0.707 v | p=0.0032 | R2=0.499
+  beef_consumption          | r=-0.703 v | p=0.0050 | R2=0.494 (Lag 1y)
+  butter_consumption        | r=-0.645 v | p=0.0094 | R2=0.416
+
+──────────────────────────────────────────────────
+ITEM: GRPSEAWEED
+──────────────────────────────────────────────────
+  national_park_visits      | r=-0.879 v | p=0.0092 | R2=0.772 (Lag 1y)
+  netflix_subscribers       | r=-0.683 v | p=0.0905 | R2=0.467 (Lag 1y)
+  cheese_consumption        | r=-0.678 v | p=0.0941 | R2=0.460 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: MRCCCN110
+──────────────────────────────────────────────────
+  cheese_consumption        | r=+0.867 ^ | p=0.0001 | R2=0.752 (Lag 1y)
+  butter_consumption        | r=+0.863 ^ | p=0.0000 | R2=0.745
+  butter_consumption        | r=+0.846 ^ | p=0.0001 | R2=0.715 (Lag 1y)
+  netflix_subscribers       | r=+0.838 ^ | p=0.0002 | R2=0.703 (Lag 1y)
+  avocado_consumption       | r=+0.821 ^ | p=0.0002 | R2=0.674
+  starbucks_stores          | r=+0.818 ^ | p=0.0003 | R2=0.669 (Lag 1y)
+  starbucks_stores          | r=+0.795 ^ | p=0.0004 | R2=0.633
+  cheese_consumption        | r=+0.791 ^ | p=0.0005 | R2=0.625
+  netflix_subscribers       | r=+0.782 ^ | p=0.0006 | R2=0.611
+  avocado_consumption       | r=+0.753 ^ | p=0.0019 | R2=0.567 (Lag 1y)
+  coffee_price              | r=+0.671 ^ | p=0.0087 | R2=0.450 (Lag 1y)
+  coffee_price              | r=+0.662 ^ | p=0.0072 | R2=0.438
+  chicken_consumption       | r=+0.567 ^ | p=0.0276 | R2=0.321
+
+──────────────────────────────────────────────────
+ITEM: GRPSEAEX
+──────────────────────────────────────────────────
+  starbucks_stores          | r=-0.862 v | p=0.0000 | R2=0.743
+  butter_consumption        | r=-0.838 v | p=0.0002 | R2=0.702 (Lag 1y)
+  avocado_consumption       | r=-0.837 v | p=0.0002 | R2=0.701 (Lag 1y)
+  cheese_consumption        | r=-0.834 v | p=0.0001 | R2=0.695
+  avocado_consumption       | r=-0.830 v | p=0.0001 | R2=0.690
+  starbucks_stores          | r=-0.826 v | p=0.0003 | R2=0.682 (Lag 1y)
+  butter_consumption        | r=-0.825 v | p=0.0002 | R2=0.680
+  netflix_subscribers       | r=-0.808 v | p=0.0003 | R2=0.653
+  cheese_consumption        | r=-0.774 v | p=0.0012 | R2=0.599 (Lag 1y)
+  netflix_subscribers       | r=-0.770 v | p=0.0013 | R2=0.593 (Lag 1y)
+  chicken_consumption       | r=-0.563 v | p=0.0362 | R2=0.317 (Lag 1y)
+  national_park_visits      | r=-0.505 v | p=0.0653 | R2=0.255 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: NO3MG60
+──────────────────────────────────────────────────
+  superbowl_viewers         | r=+0.860 ^ | p=0.0000 | R2=0.740
+  coffee_price              | r=+0.711 ^ | p=0.0043 | R2=0.506 (Lag 1y)
+  coffee_price              | r=+0.704 ^ | p=0.0034 | R2=0.496
+  national_park_visits      | r=+0.616 ^ | p=0.0145 | R2=0.379
+  superbowl_viewers         | r=+0.538 ^ | p=0.0472 | R2=0.289 (Lag 1y)
+  chicken_consumption       | r=+0.533 ^ | p=0.0410 | R2=0.284
+
+──────────────────────────────────────────────────
+ITEM: NPKKOHDRY
+──────────────────────────────────────────────────
+  coffee_price              | r=+0.825 ^ | p=0.0002 | R2=0.681
+  coffee_price              | r=+0.637 ^ | p=0.0143 | R2=0.406 (Lag 1y)
+  superbowl_viewers         | r=+0.619 ^ | p=0.0139 | R2=0.383
+  cheese_consumption        | r=+0.557 ^ | p=0.0384 | R2=0.311 (Lag 1y)
+  beef_consumption          | r=+0.550 ^ | p=0.0415 | R2=0.303 (Lag 1y)
+  cheese_consumption        | r=+0.532 ^ | p=0.0413 | R2=0.283
+  netflix_subscribers       | r=+0.522 ^ | p=0.0554 | R2=0.273 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: NPKPHOS75
+──────────────────────────────────────────────────
+  coffee_price              | r=+0.807 ^ | p=0.0009 | R2=0.651
+  chicken_consumption       | r=-0.656 v | p=0.0205 | R2=0.430 (Lag 1y)
+  superbowl_viewers         | r=+0.506 ^ | p=0.0774 | R2=0.256
+  national_park_visits      | r=-0.505 v | p=0.0943 | R2=0.255 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: NO3CA
+──────────────────────────────────────────────────
+  coffee_price              | r=+0.799 ^ | p=0.0004 | R2=0.638
+  coffee_price              | r=+0.566 ^ | p=0.0348 | R2=0.321 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: ZZ2.5GAL
+──────────────────────────────────────────────────
+  avocado_consumption       | r=+0.766 ^ | p=0.0060 | R2=0.587
+  netflix_subscribers       | r=+0.730 ^ | p=0.0108 | R2=0.533
+  butter_consumption        | r=+0.715 ^ | p=0.0135 | R2=0.511
+  starbucks_stores          | r=+0.702 ^ | p=0.0160 | R2=0.493
+  cheese_consumption        | r=+0.700 ^ | p=0.0165 | R2=0.490
+  butter_consumption        | r=+0.678 ^ | p=0.0311 | R2=0.460 (Lag 1y)
+  starbucks_stores          | r=+0.676 ^ | p=0.0318 | R2=0.457 (Lag 1y)
+  netflix_subscribers       | r=+0.667 ^ | p=0.0351 | R2=0.445 (Lag 1y)
+  cheese_consumption        | r=+0.645 ^ | p=0.0440 | R2=0.416 (Lag 1y)
+  avocado_consumption       | r=+0.633 ^ | p=0.0494 | R2=0.401 (Lag 1y)
+  superbowl_viewers         | r=-0.590 v | p=0.0561 | R2=0.348
+
+──────────────────────────────────────────────────
+ITEM: NO3CU
+──────────────────────────────────────────────────
+  coffee_price              | r=+0.738 ^ | p=0.0061 | R2=0.545
+  beef_consumption          | r=+0.671 ^ | p=0.0238 | R2=0.450 (Lag 1y)
+  superbowl_viewers         | r=+0.536 ^ | p=0.0726 | R2=0.287
+
+──────────────────────────────────────────────────
+ITEM: NPKNPHURCDI
+──────────────────────────────────────────────────
+  superbowl_viewers         | r=+0.732 ^ | p=0.0019 | R2=0.536
+  coffee_price              | r=+0.616 ^ | p=0.0190 | R2=0.380 (Lag 1y)
+  coffee_price              | r=+0.563 ^ | p=0.0289 | R2=0.317
+  beef_consumption          | r=-0.531 v | p=0.0416 | R2=0.282
+
+──────────────────────────────────────────────────
+ITEM: NPKKCL62
+──────────────────────────────────────────────────
+  chicken_consumption       | r=-0.729 v | p=0.0031 | R2=0.531 (Lag 1y)
+  beef_consumption          | r=+0.659 ^ | p=0.0103 | R2=0.435 (Lag 1y)
+  coffee_price              | r=+0.616 ^ | p=0.0144 | R2=0.380
+
+──────────────────────────────────────────────────
+ITEM: NPKPHOS85
+──────────────────────────────────────────────────
+  chicken_consumption       | r=+0.727 ^ | p=0.0173 | R2=0.528 (Lag 1y)
+  avocado_consumption       | r=+0.615 ^ | p=0.0440 | R2=0.378
+
+──────────────────────────────────────────────────
+ITEM: CHECITRIC
+──────────────────────────────────────────────────
+  beef_consumption          | r=+0.696 ^ | p=0.0057 | R2=0.484 (Lag 1y)
+  netflix_subscribers       | r=+0.662 ^ | p=0.0099 | R2=0.438 (Lag 1y)
+  beef_consumption          | r=+0.660 ^ | p=0.0075 | R2=0.435
+  cheese_consumption        | r=+0.618 ^ | p=0.0140 | R2=0.382
+  cheese_consumption        | r=+0.598 ^ | p=0.0240 | R2=0.357 (Lag 1y)
+  coffee_price              | r=+0.594 ^ | p=0.0195 | R2=0.353
+  starbucks_stores          | r=+0.576 ^ | p=0.0310 | R2=0.332 (Lag 1y)
+  netflix_subscribers       | r=+0.556 ^ | p=0.0315 | R2=0.309
+  starbucks_stores          | r=+0.510 ^ | p=0.0521 | R2=0.260
+
+──────────────────────────────────────────────────
+ITEM: NPKU32
+──────────────────────────────────────────────────
+  coffee_price              | r=+0.684 ^ | p=0.0049 | R2=0.468
+  chicken_consumption       | r=-0.679 v | p=0.0075 | R2=0.462 (Lag 1y)
+  beef_consumption          | r=+0.564 ^ | p=0.0356 | R2=0.318 (Lag 1y)
+
+──────────────────────────────────────────────────
+ITEM: NO3ZN
+──────────────────────────────────────────────────
+  national_park_visits      | r=-0.662 v | p=0.0099 | R2=0.438 (Lag 1y)
+  superbowl_viewers         | r=-0.506 v | p=0.0543 | R2=0.256
+
+──────────────────────────────────────────────────
+ITEM: NPK11370
+──────────────────────────────────────────────────
+  national_park_visits      | r=-0.651 v | p=0.0086 | R2=0.424
+
+======================================================================
+SUMMARY
+======================================================================
+Total correlations found: 118
+  Positive: 83
+  Negative: 35
+
+Most common predictive factors:
+  cheese_consumption: 17 chemical(s)
+  netflix_subscribers: 16 chemical(s)
+  coffee_price: 15 chemical(s)
+  starbucks_stores: 14 chemical(s)
+  butter_consumption: 12 chemical(s)
+
+======================================================================
+DISCLAIMER: Correlation != Causation
+These correlations may be spurious. Always validate with
+domain knowledge before using for predictions.
+======================================================================

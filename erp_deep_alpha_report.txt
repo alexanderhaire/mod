@@ -1,0 +1,7 @@
+======================================================================
+ERP DEEP ALPHA DISCOVERY REPORT
+Generated: 2026-01-16 09:36
+======================================================================
+
+No correlations found at current thresholds.
+Try lowering min_r or raising max_p.

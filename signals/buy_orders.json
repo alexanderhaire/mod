@@ -1,0 +1,51 @@
+[
+  {
+    "token_id": "[",
+    "price": 0.9,
+    "size": 33.333333333333336,
+    "side": "BUY",
+    "name": "Dow Jones (DJI) Up or Down on January 26?"
+  },
+  {
+    "token_id": "[",
+    "price": 0.9,
+    "size": 33.333333333333336,
+    "side": "BUY",
+    "name": "No change in the Selic rate after Bank of Brazil's"
+  },
+  {
+    "token_id": "[",
+    "price": 0.953,
+    "size": 31.479538300104934,
+    "side": "BUY",
+    "name": "S&P 500 (SPX) Up or Down on January 26?"
+  },
+  {
+    "token_id": "[",
+    "price": 0.9345,
+    "size": 32.102728731942214,
+    "side": "BUY",
+    "name": "Howard Bison vs. Coppin State Eagles"
+  },
+  {
+    "token_id": "[",
+    "price": 0.987,
+    "size": 30.395136778115504,
+    "side": "BUY",
+    "name": "Google (GOOGL) Up or Down on January 26?"
+  },
+  {
+    "token_id": "\"",
+    "price": 0.941,
+    "size": 31.880977683315624,
+    "side": "BUY",
+    "name": "Will the highest temperature in New York City be 1"
+  },
+  {
+    "token_id": "[",
+    "price": 0.935,
+    "size": 21.390374331550802,
+    "side": "BUY",
+    "name": "Will Arsenal FC win on 2026-01-28?"
+  }
+]

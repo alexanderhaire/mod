@@ -1,0 +1,24 @@
+[
+    {
+        "event_substring": "Trump deport less than 250,000",
+        "internet_consensus": "NO",
+        "confidence": 0.75,
+        "reasoning": "Brookings estimates ~300k deportations in 2025. Project 2025 aims for millions. 'Less than 250k' seems unlikely given the aggressive administrative stance, though logistics are a bottleneck.",
+        "sources": [
+            "Brookings",
+            "Project 2025",
+            "Pew Research"
+        ]
+    },
+    {
+        "event_substring": "DOGE cut more than $250b",
+        "internet_consensus": "NO",
+        "confidence": 0.85,
+        "reasoning": "Department Disbanded in Nov 2025. Max claimed savings were $214B (disputed). Musk's $2T goal failed. Unlikely to reach $250B retroactively.",
+        "sources": [
+            "Wikipedia",
+            "Time Magazine",
+            "Revolving Door Project"
+        ]
+    }
+]
