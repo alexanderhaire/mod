@@ -63,9 +63,9 @@ TICKER_MAP = {
     # --- CRYPTO ---
     "Bitcoin (BTC)": "BTC-USD", "Ethereum (ETH)": "ETH-USD", "Tether (USDT)": "USDT-USD", "BNB (BNB)": "BNB-USD", "Solana (SOL)": "SOL-USD", "USDC (USDC)": "USDC-USD", "XRP (XRP)": "XRP-USD", "Dogecoin (DOGE)": "DOGE-USD",
     "Cardano (ADA)": "ADA-USD", "Shiba Inu (SHIB)": "SHIB-USD", "Avalanche (AVAX)": "AVAX-USD", "TRON (TRX)": "TRX-USD", "Polkadot (DOT)": "DOT-USD", "Bitcoin Cash (BCH)": "BCH-USD", "Chainlink (LINK)": "LINK-USD",
-    "Polygon (MATIC)": "MATIC-USD", "Litecoin (LTC)": "LTC-USD", "Internet Computer (ICP)": "ICP-USD", "Uniswap (UNI)": "UNI-USD", "Ethereum Classic (ETC)": "ETC-USD", "Filecoin (FIL)": "FIL-USD",
+    "Litecoin (LTC)": "LTC-USD", "Internet Computer (ICP)": "ICP-USD", "Ethereum Classic (ETC)": "ETC-USD", "Filecoin (FIL)": "FIL-USD",
     "Bitcoin Futures (CME)": "BTC=F", "Ethereum Futures (CME)": "ETH=F", "BITO (ETF)": "BITO", "GBTC": "GBTC", "ETHE": "ETHE",
-    "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "SOLUSD": "SOL-USD", "AVAXUSD": "AVAX-USD", "LINKUSD": "LINK-USD", "UNIUSD": "UNI-USD",
+    "BTCUSD": "BTC-USD", "ETHUSD": "ETH-USD", "SOLUSD": "SOL-USD", "AVAXUSD": "AVAX-USD", "LINKUSD": "LINK-USD",
     "DOGEUSD": "DOGE-USD", "LTCUSD": "LTC-USD", "BCHUSD": "BCH-USD", "AAVEUSD": "AAVE-USD",
     
     # --- STOCKS ---
