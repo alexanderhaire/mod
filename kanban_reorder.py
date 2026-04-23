@@ -49,9 +49,10 @@ from synthetic_bom import reconstruct_synthetic_bom, MIN_CONFIDENT_MOS
 # and drilled via a synthetic BOM reconstructed from MOP1016 picklist history.
 VENDOR_SOURCE_WINDOW_DAYS = 3 * 365
 
-# Safety rail for the recursive drill into synthetic BOMs — a malformed MO
-# history loop shouldn't take down the page.
-MAX_DRILL_DEPTH = 5
+# Safety rail for the recursive drill into synthetic BOMs. Real cycle safety
+# comes from the `path` set threaded through _drill; the numeric cap only
+# catches pathologically deep non-cyclic chains.
+MAX_DRILL_DEPTH = 15
 
 LOGGER = logging.getLogger(__name__)
 
@@ -312,6 +313,17 @@ def explode_demand_to_raw_materials(
     if last_receipt is None:
         last_receipt = fetch_last_vendor_receipt_map(cursor)
 
+    # Fetch item class codes so we can distinguish raw materials (always
+    # purchased) from manufactured intermediates. Without this, raw materials
+    # whose last PO receipt is >3 years old get misclassified as "manufactured"
+    # and trigger synthetic BOMs that produce wildly inflated false demand.
+    item_classes: dict[str, str] = {}
+    try:
+        cursor.execute("SELECT RTRIM(ITEMNMBR), RTRIM(ITMCLSCD) FROM IV00101")
+        item_classes = {r[0]: r[1] for r in cursor.fetchall()}
+    except pyodbc.Error as err:
+        LOGGER.warning("Failed to fetch item classes: %s", err)
+
     bom_cache: dict[str, list] = {}
     synth_cache: dict[str, list] = {}
     accumulator: dict[str, dict[str, Any]] = {}
@@ -322,10 +334,15 @@ def explode_demand_to_raw_materials(
     def _classify(item: str) -> str:
         if item in obsolete_items:
             return "obsolete"
+        # Raw materials are always purchased — never synthesize a BOM for them.
+        cls_code = item_classes.get(item, "")
+        if cls_code.startswith("RAWMAT"):
+            return "vendor"
+        # Non-raw items with a recent PO receipt are also vendor-sourced.
         rcpt = last_receipt.get(item)
-        if rcpt is None or rcpt < cutoff:
-            return "manufactured"
-        return "vendor"
+        if rcpt is not None and rcpt >= cutoff:
+            return "vendor"
+        return "manufactured"
 
     def _accumulate(
         leaf: str,
@@ -333,6 +350,11 @@ def explode_demand_to_raw_materials(
         driving_row: "pd.Series",
         driving_parent: str,
     ) -> None:
+        # REC-XXX is the receiving code for XXX — same material. Always
+        # accumulate under the base item so the buy list shows the item
+        # you actually order from the vendor.
+        if leaf.startswith("REC-"):
+            leaf = leaf[4:]
         existing = accumulator.get(leaf)
         priority = float(driving_row["priority_score"])
         if existing is None:
@@ -362,6 +384,7 @@ def explode_demand_to_raw_materials(
         driving_row: "pd.Series",
         driving_parent: str,
         depth: int,
+        from_synthetic: bool = False,
     ) -> None:
         if depth > MAX_DRILL_DEPTH:
             LOGGER.warning("drill depth cap hit on %s (depth=%d)", item, depth)
@@ -369,13 +392,31 @@ def explode_demand_to_raw_materials(
 
         cls = _classify(item)
         if cls == "obsolete":
-            # Dropped: we never buy, make, or net against obsolete stock.
             return
         if cls == "vendor":
             _accumulate(item, qty_required, driving_row, driving_parent)
             return
 
-        # Manufactured: synthesize a BOM from MO history and recurse.
+        # Item is "manufactured" (no recent PO receipt).
+        #
+        # If we already arrived here via a synthetic BOM, do NOT recurse
+        # further. Synthetic BOMs are inferred from MO history and their
+        # component lists are noisy — recursing through them creates false
+        # parent→child chains (e.g. H2OHOT → everything on the same MO).
+        # Instead, treat this as a non-purchasable item and log it.
+        if from_synthetic:
+            entry = missing_bom_seen.setdefault(item, {
+                "item_number": item,
+                "needed_qty": 0.0,
+                "driving_parent": driving_parent,
+                "driving_customer": driving_row.get("driving_customer", ""),
+                "reason": "non_purchasable_utility",
+                "error": "manufactured item reached via synthetic BOM — not drilled further",
+            })
+            entry["needed_qty"] += qty_required
+            return
+
+        # Synthesize a BOM from MO history (one level only).
         if item not in synth_cache:
             try:
                 synth_cache[item] = reconstruct_synthetic_bom(cursor, item)
@@ -406,7 +447,6 @@ def explode_demand_to_raw_materials(
             entry["needed_qty"] += qty_required
             return
 
-        # Record for the Manufactured Intermediates report.
         manu_entry = manufactured_seen.setdefault(item, {
             "item_number": item,
             "needed_qty": 0.0,
@@ -425,7 +465,9 @@ def explode_demand_to_raw_materials(
             comp_qty = float(sr.Design_Qty or 0) * qty_required
             if comp_qty <= 0:
                 continue
-            _drill(comp, comp_qty, driving_row, driving_parent, depth + 1)
+            # Mark children as from_synthetic=True so they won't recurse
+            # into yet another synthetic BOM.
+            _drill(comp, comp_qty, driving_row, driving_parent, depth + 1, from_synthetic=True)
 
     total_parents = len(demand_df)
     for i, (_, row) in enumerate(demand_df.iterrows()):

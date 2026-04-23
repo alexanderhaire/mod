@@ -1,16 +1,6 @@
 {
   "1": {
     "favorite_items": [
-      "GRPFISHEM                      ",
-      "NO3CA                          ",
-      "GRPFULVIC                      ",
-      "NO3CA12                        ",
-      "NPKU32                         ",
-      "NO3MG60                        ",
-      "NPKPHOS75                      ",
-      "ZZ2.5GALF                      ",
-      "SO4BORIC                       ",
-      "ZZLIDSCAMO                     ",
       "CHEMOLASS                      ",
       "NPKKOHDRY                      ",
       "NO3FE                          ",
@@ -20,7 +10,17 @@
       "MISCINTGR80                    ",
       "SO4MOLY                        ",
       "CHEH2SO4                       ",
-      "SURFEMT-MULZ                   "
+      "SURFEMT-MULZ                   ",
+      "NPKKTS                         ",
+      "ZZLIDSVENTED2.5                ",
+      "GRPHUMICLIQ                    ",
+      "ZZ2.5GALCASE                   ",
+      "OXMN                           ",
+      "EDTACU                         ",
+      "NPKU32                         ",
+      "NO3MG60                        ",
+      "NPK11370                       ",
+      "SO4ZNSTD                       "
     ],
     "favorite_categories": [],
     "favorite_vendors": [],
@@ -40,25 +40,25 @@
     ],
     "prediction_hits": 0,
     "prediction_attempts": 0,
-    "last_updated": "2026-04-14T16:45:29.725897",
+    "last_updated": "2026-04-23T15:57:48.605577",
     "conversions": [],
     "decision_patterns": {
-      "avg_decision_time": 153.16074466705322,
+      "avg_decision_time": 8.486433982849121,
       "fastest_decisions": [],
       "slowest_decisions": [
-        "NPKKOHDRY                      ",
-        "NO3FE                          ",
-        "NO3MG63                        ",
-        "NPKPHOS85                      ",
-        "MISCINTGR80                    ",
-        "GRPFISHEM                      ",
-        "MISCH2O2                       ",
-        "SO4MOLY                        ",
-        "CHEH2SO4                       ",
-        "SURFEMT-MULZ                   "
+        "SURFEMT-MULZ                   ",
+        "NPKKTS                         ",
+        "ZZLIDSVENTED2.5                ",
+        "NPKU32                         ",
+        "ZZ2.5GALCASE                   ",
+        "CHEMOLASS                      ",
+        "OXMN                           ",
+        "EDTACU                         ",
+        "NO3MG60                        ",
+        "NPK11370                       "
       ],
       "chart_interactions": 0,
-      "interaction_style": "Analytical / Deliberate"
+      "interaction_style": "Intuitive / Decisive"
     },
     "love_level": 21
   },

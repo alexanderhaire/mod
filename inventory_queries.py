@@ -186,7 +186,11 @@ def fetch_on_hand_by_item(cursor: pyodbc.Cursor, items: list[str], location: str
 
 
 def fetch_open_po_supply(cursor: pyodbc.Cursor, items: list[str], location: str = PRIMARY_LOCATION) -> tuple[dict[str, Decimal], str]:
-    """Return open purchase order quantities for items (POLNESTA = 1), filtered to a location (default MAIN)."""
+    """Return open purchase order quantities for items, filtered to a location (default MAIN).
+
+    Includes PO line statuses 1 (New), 2 (Released/Change Order), and 3
+    (Received but not fully closed). Subtracts cancelled quantity.
+    """
     if not items:
         return {}, ""
     filtered = [itm for itm in items if itm]
@@ -197,10 +201,10 @@ def fetch_open_po_supply(cursor: pyodbc.Cursor, items: list[str], location: str 
     params = [*filtered, location] if location else filtered
     location_clause = " AND LOCNCODE = ?" if location else ""
     query = f"""
-        SELECT ITEMNMBR, SUM(QTYORDER) AS OpenPOQty
+        SELECT ITEMNMBR, SUM(QTYORDER - QTYCANCE) AS OpenPOQty
         FROM POP10110
         WHERE ITEMNMBR IN ({placeholders})
-          AND POLNESTA = 1{location_clause}
+          AND POLNESTA IN (1, 2, 3){location_clause}
         GROUP BY ITEMNMBR
     """
     sql_preview = format_sql_preview(query, params)

@@ -77,8 +77,8 @@ def render_kanban_reorder():
 
     try:
         with get_pooled_connection() as conn:
+            conn.timeout = 60  # pyodbc query timeout — aborts runaway recursive CTEs
             cur = conn.cursor()
-            cur.timeout = 60  # pyodbc query timeout — aborts runaway recursive CTEs
             result = build_integrated_reorder_list(
                 cur,
                 today=datetime.date.today(),
@@ -169,11 +169,8 @@ def _render_header_metrics(raw_df: pd.DataFrame, fg_df: pd.DataFrame, as_of: dat
 
 def _render_raw_materials(df: pd.DataFrame):
     if df.empty:
-        st.info("No raw materials need ordering. 🎉")
+        st.info("No raw materials need ordering.")
         return
-
-    st.subheader("Raw Material Buy List")
-    st.caption("Sorted by priority score (inherited from the most-urgent parent order) then net need.")
 
     display_cols = [
         "item_number", "item_description", "urgency_label",
@@ -183,17 +180,17 @@ def _render_raw_materials(df: pd.DataFrame):
         "driving_parent", "driving_customer", "driving_bucket",
         "earliest_req_date", "spill_location", "max_priority_score",
     ]
-    present = [c for c in display_cols if c in df.columns]
-    display_df = df[present].copy()
 
-    # Pretty rounding
-    for c in ["sop_derived_demand", "kanban_refill_qty", "gross_requirement",
-              "on_hand_main", "on_hand_other", "proxy_credit", "on_order",
-              "net_need", "max_priority_score"]:
-        if c in display_df.columns:
-            display_df[c] = display_df[c].astype(float).round(2)
+    def _format_df(sub: pd.DataFrame) -> pd.DataFrame:
+        present = [c for c in display_cols if c in sub.columns]
+        out = sub[present].copy()
+        for c in ["sop_derived_demand", "kanban_refill_qty", "gross_requirement",
+                   "on_hand_main", "on_hand_other", "proxy_credit", "on_order",
+                   "net_need", "max_priority_score"]:
+            if c in out.columns:
+                out[c] = out[c].astype(float).round(2)
+        return out
 
-    # Conditional styling by urgency bucket
     def _row_color(row):
         bucket = row.get("driving_bucket", "")
         if bucket == "past_due":
@@ -206,13 +203,47 @@ def _render_raw_materials(df: pd.DataFrame):
             return ["background-color: #e0ebff"] * len(row)
         return [""] * len(row)
 
-    try:
-        styled = display_df.style.apply(_row_color, axis=1)
-        st.dataframe(styled, use_container_width=True, hide_index=True)
-    except Exception:
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+    def _show(sub: pd.DataFrame):
+        display_df = _format_df(sub)
+        try:
+            styled = display_df.style.apply(_row_color, axis=1)
+            st.dataframe(styled, use_container_width=True, hide_index=True)
+        except Exception:
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    _render_csv_download(display_df, "kanban_raw_materials.csv")
+    # Split into SOP-driven (urgent) vs kanban-only (buffer restock)
+    has_bucket = "driving_bucket" in df.columns
+    if has_bucket:
+        sop_mask = df["driving_bucket"] != "kanban_only"
+        sop_df = df[sop_mask]
+        kanban_df = df[~sop_mask]
+    else:
+        sop_df = df
+        kanban_df = df.iloc[0:0]
+
+    # --- Section 1: Order-driven ---
+    st.subheader(f"Order NOW — open-order demand ({len(sop_df)} items)")
+    st.caption(
+        "Raw materials required by open sales orders (past-due, due today, due tomorrow). "
+        "These drive today's production schedule."
+    )
+    if sop_df.empty:
+        st.success("All open-order raw materials are covered by on-hand + on-order supply.")
+    else:
+        _show(sop_df)
+
+    # --- Section 2: Kanban buffer ---
+    with st.expander(f"Restock — below kanban buffer ({len(kanban_df)} items)", expanded=False):
+        st.caption(
+            "Raw materials with no open-order demand but on-hand is below one month's "
+            "P80 consumption rate. These are buffer maintenance, not urgent."
+        )
+        if kanban_df.empty:
+            st.info("All kanban buffers are healthy.")
+        else:
+            _show(kanban_df)
+
+    _render_csv_download(_format_df(df), "kanban_raw_materials.csv")
 
 
 # ---------------------------------------------------------------------------
