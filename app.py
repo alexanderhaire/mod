@@ -2807,18 +2807,32 @@ try:
                         for v_info in po_vendor_infos:
                             v_name = v_info.get('name', 'Unknown')
                             v_phone = v_info.get('phone')
-                            
+
                             st.markdown(f"**Vendor:** {v_name}")
-                            
+
                             v_po = v_info.get('po_number')
                             if v_po:
                                 st.markdown(f"**PO:** {v_po}")
-                                
+
                             if v_phone:
                                 st.markdown(f"**Phone:** {v_phone}")
                             else:
                                 st.markdown(f"**Phone:** No phone number")
-                        
+                    else:
+                        last_vendor = inventory.get('LastVendorInfo') or {}
+                        last_name = last_vendor.get('name')
+                        if last_name:
+                            last_date = last_vendor.get('date')
+                            last_date_str = last_date.strftime('%Y-%m-%d') if hasattr(last_date, 'strftime') else (str(last_date) if last_date else '')
+                            date_suffix = f" on {last_date_str}" if last_date_str else ""
+                            st.markdown(f"**Last Purchased From:** {last_name}{date_suffix}")
+                            last_po = last_vendor.get('po_number')
+                            if last_po:
+                                st.markdown(f"**PO:** {last_po}")
+                            last_phone = last_vendor.get('phone')
+                            if last_phone:
+                                st.markdown(f"**Phone:** {last_phone}")
+
                     st.markdown(f"**Inventory Value:** ${inv_value:,.2f}")
 
                 with kpi7:

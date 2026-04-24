@@ -69,126 +69,118 @@ def fetch_product_price_history(cursor: pyodbc.Cursor, item_number: str, days: i
         start_date = end_date - datetime.timedelta(days=days)
         
         history = []
-        
-        # 1. Try fetching Purchase Receipt History (for Raw Materials)
-        if is_raw_material:
-            # For raw materials, get purchase receipt cost history with Vendor and UofM details
-            # Fetch raw transactions to allow vendor filtering and unit normalization
-            receipt_query = """
-            SELECT 
-                CAST(MAX(h.RECEIPTDATE) AS DATE) as TransactionDate,
-                MAX(h.VENDORID) as VENDORID,
-                MAX(h.VENDNAME) as VENDNAME,
-                MAX(vm.PHNUMBR1) as Phone1,
-                MAX(vm.PHNUMBR2) as Phone2,
-                MAX(vm.PHONE3) as Phone3,
-                MAX(l.UOFM) as UOFM,
-                MAX(l.UMQTYINB) as UMQTYINB,
-                AVG(l.UNITCOST) as UNITCOST,
-                SUM(l.EXTDCOST) as EXTDCOST,
-                MAX(h.ORFRTAMT) as ORFRTAMT,
-                MAX(h.SUBTOTAL) as SUBTOTAL,
-                (SELECT TOP 1 UNITCOST FROM IV10200 iv WHERE iv.RCPTNMBR = l.POPRCTNM AND iv.ITEMNMBR = l.ITEMNMBR) as InventoryUnitCost,
-                MAX(l.PONUMBER) as PONUMBER
-            FROM POP30310 l
-            JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
-            LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
-            WHERE l.ITEMNMBR = ?
-                AND h.RECEIPTDATE >= ?
-                AND h.RECEIPTDATE <= ?
-                AND l.UNITCOST > 0
-                AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns (4=Return, 5=Return w/Credit)
-                AND h.VOIDSTTS = 0
-                AND l.NONINVEN = 0
-                AND l.LOCNCODE = 'MAIN'
-                AND NOT EXISTS (                -- Exclude receipts that were later returned
-                    SELECT 1 FROM POP30310 ret
-                    JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
-                    WHERE ret.RCPTRETNUM = l.POPRCTNM
-                        AND reth.POPTYPE IN (4, 5)
-                )
-            GROUP BY l.POPRCTNM, l.ITEMNMBR
-            ORDER BY TransactionDate
-            """
-            cursor.execute(receipt_query, item_number, start_date, end_date)
-            history_rows = cursor.fetchall()
-            
-            if cursor.description and history_rows:
-                hist_columns = [c[0] for c in cursor.description]
-                
-                for row in history_rows:
-                    r = dict(zip(hist_columns, row))
-                    qty_in_base = float(r.get('UMQTYINB') or 1)
-                    
-                    # USER DEFINITIONS:
-                    # "Landed Cost" = Vendor Base Price (e.g. 0.5875)
-                    # "Delivered Cost" = Fully Loaded / Inventory Price (e.g. 0.6015)
-                    
-                    landed_cost_val = float(r.get('UNITCOST') or 0)
-                    delivered_cost_val = float(r.get('InventoryUnitCost') or 0)
-                    
-                    ext_cost = float(r.get('EXTDCOST') or 0)
-                    
-                    # LOGIC FIX: Landed Cost (Vendor Base) should naturally be <= Delivered Cost (Fully Loaded).
-                    # If Landed > Delivered, it implies the Receipt Cost was estimated high and later adjusted down (e.g. lower invoice).
-                    # In these cases, the "Landed Cost" shown should reflect the final reality (Delivered Cost), not the initial high estimate.
-                    # This also covers the UOM anomaly case (where Landed is 2x+ Delivered).
-                    is_anomaly = False
-                    if landed_cost_val > delivered_cost_val:
-                        landed_cost_val = delivered_cost_val
-                        # We don't mark as 'is_anomaly' for small variances, only massive ones if we wanted specific flagging,
-                        # but for the chart, correctness is priority.
-                        if delivered_cost_val > 0 and landed_cost_val > (delivered_cost_val * 1.5):
-                            is_anomaly = True
-                    
-                    # Normalize cost to Base Unit (e.g., Cost Per Pound)
-                    if qty_in_base > 0:
-                        norm_landed = landed_cost_val / qty_in_base
-                        norm_delivered = delivered_cost_val / qty_in_base
-                    else:
-                        norm_landed = landed_cost_val
-                        norm_delivered = delivered_cost_val
-                        
-                    # Calculate Quantity based on Cost
-                    # If it was an anomaly, we recalculate quantity using the CORRECTED cost to find the "Implied Quantity"
-                    # E.g. If Ext Cost $757 and Rate $6, implies ~120 units, not 55 units.
-                    qty_purchased = 0
-                    if landed_cost_val > 0:
-                         qty_purchased = (ext_cost / landed_cost_val) * qty_in_base
-                    
-                    # Resolve best phone number (Phone 1, 2, or 3) - Skip empty or all-zeros
-                    raw_phones = [str(r.get('Phone1', '')).strip(), str(r.get('Phone2', '')).strip(), str(r.get('Phone3', '')).strip()]
-                    final_phone = ""
-                    for p in raw_phones:
-                        # Check if has non-zero digits
-                        d = "".join(filter(str.isdigit, p))
-                        if d and not all(c == '0' for c in d):
-                            final_phone = p
-                            break
+        has_pop_history = False
 
-                    history.append({
-                        'TransactionDate': r['TransactionDate'],
-                        'AvgCost': norm_delivered, # Use Delivered (High) as main line
-                        'DeliveredCost': norm_delivered, 
-                        'LandedCost': norm_landed,
-                        'VendorID': str(r.get('VENDORID', '')).strip(),
-                        'VendorName': str(r.get('VENDNAME', '')).strip(),
-                        'VendorPhone': final_phone,
-                        'PONumber': str(r.get('PONUMBER', '')).strip(),
-                        'UofM': str(r.get('UOFM', '')).strip(),
-                        'OriginalCost': landed_cost_val,
-                        'ExtendedCost': ext_cost,
-                        'TransactionCount': 1,
-                        'Quantity': qty_purchased,
-                        'IsAnomalyFix': is_anomaly
-                    })
-            else:
-                # Fallback: If no purchase history found (e.g. manufactured RM, or old stock), 
-                # treat as standard inventory item
-                is_raw_material = False # Flip flag to indicate we are showing internal history
+        # 1. Try fetching Purchase Receipt History for any item with PO receipts.
+        #    Previously gated on raw-material class only, so containers and other
+        #    purchased non-raw items were routed to the IV30300 fallback and lost
+        #    all vendor / PO / UofM detail even though they have real receipts.
+        receipt_query = """
+        SELECT
+            CAST(MAX(h.RECEIPTDATE) AS DATE) as TransactionDate,
+            MAX(h.VENDORID) as VENDORID,
+            MAX(h.VENDNAME) as VENDNAME,
+            MAX(vm.PHNUMBR1) as Phone1,
+            MAX(vm.PHNUMBR2) as Phone2,
+            MAX(vm.PHONE3) as Phone3,
+            MAX(l.UOFM) as UOFM,
+            MAX(l.UMQTYINB) as UMQTYINB,
+            AVG(l.UNITCOST) as UNITCOST,
+            SUM(l.EXTDCOST) as EXTDCOST,
+            MAX(h.ORFRTAMT) as ORFRTAMT,
+            MAX(h.SUBTOTAL) as SUBTOTAL,
+            (SELECT TOP 1 UNITCOST FROM IV10200 iv WHERE iv.RCPTNMBR = l.POPRCTNM AND iv.ITEMNMBR = l.ITEMNMBR) as InventoryUnitCost,
+            MAX(l.PONUMBER) as PONUMBER
+        FROM POP30310 l
+        JOIN POP30300 h ON l.POPRCTNM = h.POPRCTNM
+        LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
+        WHERE l.ITEMNMBR = ?
+            AND h.RECEIPTDATE >= ?
+            AND h.RECEIPTDATE <= ?
+            AND l.UNITCOST > 0
+            AND h.POPTYPE NOT IN (2, 4, 5)  -- Exclude Invoice Matches and Returns (4=Return, 5=Return w/Credit)
+            AND h.VOIDSTTS = 0
+            AND l.NONINVEN = 0
+            AND l.LOCNCODE = 'MAIN'
+            AND NOT EXISTS (                -- Exclude receipts that were later returned
+                SELECT 1 FROM POP30310 ret
+                JOIN POP30300 reth ON ret.POPRCTNM = reth.POPRCTNM
+                WHERE ret.RCPTRETNUM = l.POPRCTNM
+                    AND reth.POPTYPE IN (4, 5)
+            )
+        GROUP BY l.POPRCTNM, l.ITEMNMBR
+        ORDER BY TransactionDate
+        """
+        cursor.execute(receipt_query, item_number, start_date, end_date)
+        history_rows = cursor.fetchall()
 
-        # 2. Fetch Inventory Transaction History (For FGs OR Fallback)
-        if not is_raw_material:
+        if cursor.description and history_rows:
+            hist_columns = [c[0] for c in cursor.description]
+
+            for row in history_rows:
+                r = dict(zip(hist_columns, row))
+                qty_in_base = float(r.get('UMQTYINB') or 1)
+
+                # USER DEFINITIONS:
+                # "Landed Cost" = Vendor Base Price (e.g. 0.5875)
+                # "Delivered Cost" = Fully Loaded / Inventory Price (e.g. 0.6015)
+
+                landed_cost_val = float(r.get('UNITCOST') or 0)
+                delivered_cost_val = float(r.get('InventoryUnitCost') or 0)
+
+                ext_cost = float(r.get('EXTDCOST') or 0)
+
+                # LOGIC FIX: Landed Cost (Vendor Base) should naturally be <= Delivered Cost (Fully Loaded).
+                # If Landed > Delivered, it implies the Receipt Cost was estimated high and later adjusted down (e.g. lower invoice).
+                is_anomaly = False
+                if landed_cost_val > delivered_cost_val:
+                    landed_cost_val = delivered_cost_val
+                    if delivered_cost_val > 0 and landed_cost_val > (delivered_cost_val * 1.5):
+                        is_anomaly = True
+
+                # Normalize cost to Base Unit (e.g., Cost Per Pound)
+                if qty_in_base > 0:
+                    norm_landed = landed_cost_val / qty_in_base
+                    norm_delivered = delivered_cost_val / qty_in_base
+                else:
+                    norm_landed = landed_cost_val
+                    norm_delivered = delivered_cost_val
+
+                # Calculate Quantity based on Cost
+                qty_purchased = 0
+                if landed_cost_val > 0:
+                    qty_purchased = (ext_cost / landed_cost_val) * qty_in_base
+
+                # Resolve best phone number (Phone 1, 2, or 3) - skip empty or all-zeros
+                raw_phones = [str(r.get('Phone1', '')).strip(), str(r.get('Phone2', '')).strip(), str(r.get('Phone3', '')).strip()]
+                final_phone = ""
+                for p in raw_phones:
+                    d = "".join(filter(str.isdigit, p))
+                    if d and not all(c == '0' for c in d):
+                        final_phone = p
+                        break
+
+                history.append({
+                    'TransactionDate': r['TransactionDate'],
+                    'AvgCost': norm_delivered, # Use Delivered (High) as main line
+                    'DeliveredCost': norm_delivered,
+                    'LandedCost': norm_landed,
+                    'VendorID': str(r.get('VENDORID', '')).strip(),
+                    'VendorName': str(r.get('VENDNAME', '')).strip(),
+                    'VendorPhone': final_phone,
+                    'PONumber': str(r.get('PONUMBER', '')).strip(),
+                    'UofM': str(r.get('UOFM', '')).strip(),
+                    'OriginalCost': landed_cost_val,
+                    'ExtendedCost': ext_cost,
+                    'TransactionCount': 1,
+                    'Quantity': qty_purchased,
+                    'IsAnomalyFix': is_anomaly
+                })
+            has_pop_history = len(history) > 0
+
+        # 2. Fallback: no PO receipts for this item (manufactured items, adjustments-only).
+        #    Use inventory transaction data (IV30300). Vendor columns stay null.
+        if not has_pop_history:
             # For finished goods, use inventory transaction data (IV30300) to track cost
             # This captures manufacturing costs/adjustments which is more relevant for "Cost" than selling price
             inv_query = """
@@ -520,9 +512,46 @@ def fetch_product_inventory_trends(cursor: pyodbc.Cursor, item_number: str) -> d
             inventory['OnOrder'] = po_on_order
             inventory['OnOrderVendorInfos'] = vendor_infos
             inventory['OnOrderVendors'] = sorted(list(set(v['name'] for v in vendor_infos))) # Keep backward compatibility
-            
+
         except Exception as e:
             # Fallback to IV00102 OnOrder if PO query fails, but likely 0 if MAIN filtered
+            pass
+
+        try:
+            last_po_query = """
+            SELECT TOP 1
+                h.VENDORID,
+                h.VENDNAME,
+                h.PONUMBER,
+                COALESCE(h.RECEIPTDATE, h.DOCDATE) as LastDate,
+                vm.PHNUMBR1,
+                vm.PHNUMBR2,
+                vm.PHONE3
+            FROM POP30110 l
+            JOIN POP30100 h ON l.PONUMBER = h.PONUMBER
+            LEFT JOIN PM00200 vm ON h.VENDORID = vm.VENDORID
+            WHERE l.ITEMNMBR = ?
+              AND h.VOIDSTTS = 0
+              AND h.POPTYPE NOT IN (4, 5)
+            ORDER BY COALESCE(h.RECEIPTDATE, h.DOCDATE) DESC
+            """
+            cursor.execute(last_po_query, item_number)
+            last_row = cursor.fetchone()
+            if last_row:
+                raw_phones = [str(last_row[4] or '').strip(), str(last_row[5] or '').strip(), str(last_row[6] or '').strip()]
+                final_phone = None
+                for p in raw_phones:
+                    d = "".join(filter(str.isdigit, p))
+                    if d and not all(c == '0' for c in d):
+                        final_phone = p
+                        break
+                inventory['LastVendorInfo'] = {
+                    'name': str(last_row[1] or '').strip() or None,
+                    'po_number': str(last_row[2] or '').strip() or None,
+                    'date': last_row[3],
+                    'phone': final_phone,
+                }
+        except Exception:
             pass
         
         # Calculate inventory metrics
