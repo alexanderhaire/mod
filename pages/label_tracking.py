@@ -9,7 +9,7 @@ from secrets_loader import build_connection_string
 
 def render_page():
     st.title("Label Tracking & Forecasting")
-    st.caption("Forecast label demand from finished goods sales, track inventory, and identify reorder needs")
+    st.caption("Forecast label demand from finished goods sales, track inventory, and identify reorder needs. Vendor: Southern Tape & Label.")
 
     # --- Sidebar ---
     st.sidebar.header("Settings")
@@ -72,8 +72,7 @@ def render_page():
             JOIN POP10100 h ON l.PONUMBER = h.PONUMBER
             WHERE h.POSTATUS IN (1, 2, 3)
               AND (
-                LTRIM(RTRIM(h.VENDORID)) IN ('SOUTHERNTAPE','EXPRESSPRINT','SCNPRINT',
-                    'DESCOSPRINTING','STANDARDPRINT','TAPEPROD')
+                LTRIM(RTRIM(h.VENDORID)) = 'SOUTHERNTAPE'
                 OR EXISTS (
                     SELECT 1 FROM IV00101 i
                     WHERE i.ITEMNMBR = l.ITEMNMBR AND i.ITMCLSCD = 'CUSTLABEL'
@@ -208,11 +207,6 @@ def render_page():
     )
     if urgency_filter:
         df = df[df["Urgency"].isin(urgency_filter)]
-
-    vendor_list = sorted(df["Vendor"].unique())
-    vendor_filter = st.sidebar.multiselect("Filter by Vendor", vendor_list, key="lbl_ven")
-    if vendor_filter:
-        df = df[df["Vendor"].isin(vendor_filter)]
 
     if df.empty:
         st.info("No labels match the selected filters.")

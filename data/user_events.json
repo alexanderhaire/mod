@@ -1,372 +1,6 @@
 {
   "1": [
     {
-      "type": "product_view",
-      "timestamp": "2026-03-12T12:17:34.326298",
-      "hour": 12,
-      "payload": {
-        "item": "GRPFULVIC                      "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T12:25:07.214223",
-      "hour": 12,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T12:25:07.252173",
-      "hour": 12,
-      "payload": {
-        "item": "GRPFULVIC                      "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:35:19.684548",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:35:26.854572",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:35:29.929659",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "decision_timing",
-      "timestamp": "2026-03-12T13:35:30.085462",
-      "hour": 13,
-      "payload": {
-        "context": "inventory_list_select",
-        "seconds": 10.54125189781189,
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:35:30.341369",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:35:30.375780",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:35:48.989671",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:35:49.017871",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:35:50.422821",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:35:50.464570",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:36:34.232165",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:36:34.264556",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:36:46.154042",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:36:46.183847",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:39:06.570956",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:39:06.621614",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:39:07.588756",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:39:12.273703",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:39:19.204348",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:39:35.137270",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:40:28.170358",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:40:47.627159",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:40:51.272501",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "decision_timing",
-      "timestamp": "2026-03-12T13:40:51.405762",
-      "hour": 13,
-      "payload": {
-        "context": "inventory_list_select",
-        "seconds": 321.28405380249023,
-        "item": "OXZN                           "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:40:51.660124",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:40:51.689733",
-      "hour": 13,
-      "payload": {
-        "item": "OXZN                           "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:41:15.590427",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:41:15.621125",
-      "hour": 13,
-      "payload": {
-        "item": "OXZN                           "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:41:42.379595",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:41:42.413521",
-      "hour": 13,
-      "payload": {
-        "item": "OXZN                           "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:41:53.504430",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:41:53.538113",
-      "hour": 13,
-      "payload": {
-        "item": "OXZN                           "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:44:53.693031",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:45:05.074715",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:45:07.298068",
-      "hour": 13,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "decision_timing",
-      "timestamp": "2026-03-12T13:45:07.510404",
-      "hour": 13,
-      "payload": {
-        "context": "inventory_list_select",
-        "seconds": 14.007783651351929,
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T13:45:07.874446",
-      "hour": 13,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T13:45:07.907640",
-      "hour": 13,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T14:48:36.470698",
-      "hour": 14,
-      "payload": {
-        "page": "product_insights"
-      }
-    },
-    {
-      "type": "product_view",
-      "timestamp": "2026-03-12T14:48:36.507951",
-      "hour": 14,
-      "payload": {
-        "item": "SO4ZNSTD                       "
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T14:48:37.677355",
-      "hour": 14,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
-      "type": "page_view",
-      "timestamp": "2026-03-12T14:48:42.433047",
-      "hour": 14,
-      "payload": {
-        "page": "market_overview"
-      }
-    },
-    {
       "type": "page_view",
       "timestamp": "2026-03-12T14:48:51.932198",
       "hour": 14,
@@ -8216,6 +7850,376 @@
       "hour": 15,
       "payload": {
         "item": "NPKU32                         "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T08:45:35.021755",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T08:45:51.877454",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T08:45:54.854334",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T08:45:57.966077",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "decision_timing",
+      "timestamp": "2026-04-24T08:45:58.170672",
+      "hour": 8,
+      "payload": {
+        "context": "inventory_list_select",
+        "seconds": 23.402493238449097,
+        "item": "ZZ2.5GALCASE                   "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T08:45:58.528234",
+      "hour": 8,
+      "payload": {
+        "page": "product_insights"
+      }
+    },
+    {
+      "type": "product_view",
+      "timestamp": "2026-04-24T08:45:59.987179",
+      "hour": 8,
+      "payload": {
+        "item": "ZZ2.5GALCASE                   "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T08:58:19.053654",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T09:16:21.686415",
+      "hour": 9,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T09:16:29.376883",
+      "hour": 9,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T09:16:43.372439",
+      "hour": 9,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T09:16:46.525010",
+      "hour": 9,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T09:16:48.524602",
+      "hour": 9,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "decision_timing",
+      "timestamp": "2026-04-24T09:16:48.683478",
+      "hour": 9,
+      "payload": {
+        "context": "inventory_list_select",
+        "seconds": 27.103938341140747,
+        "item": "ZZ2.5GALCASE                   "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T09:16:48.953386",
+      "hour": 9,
+      "payload": {
+        "page": "product_insights"
+      }
+    },
+    {
+      "type": "product_view",
+      "timestamp": "2026-04-24T09:16:48.980586",
+      "hour": 9,
+      "payload": {
+        "item": "ZZ2.5GALCASE                   "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:24:43.066315",
+      "hour": 16,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:24:52.922159",
+      "hour": 16,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:24:57.066880",
+      "hour": 16,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "decision_timing",
+      "timestamp": "2026-04-24T16:24:57.216826",
+      "hour": 16,
+      "payload": {
+        "context": "inventory_list_select",
+        "seconds": 14.297791719436646,
+        "item": "GRPHUMICLIQ                    "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:24:57.443567",
+      "hour": 16,
+      "payload": {
+        "page": "product_insights"
+      }
+    },
+    {
+      "type": "product_view",
+      "timestamp": "2026-04-24T16:24:57.477895",
+      "hour": 16,
+      "payload": {
+        "item": "GRPHUMICLIQ                    "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:25:03.291687",
+      "hour": 16,
+      "payload": {
+        "page": "product_insights"
+      }
+    },
+    {
+      "type": "product_view",
+      "timestamp": "2026-04-24T16:25:03.361555",
+      "hour": 16,
+      "payload": {
+        "item": "GRPHUMICLIQ                    "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:25:04.880413",
+      "hour": 16,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:25:43.150189",
+      "hour": 16,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:25:47.828387",
+      "hour": 16,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "decision_timing",
+      "timestamp": "2026-04-24T16:25:47.984969",
+      "hour": 16,
+      "payload": {
+        "context": "inventory_list_select",
+        "seconds": 50.72636961936951,
+        "item": "GRPTRAINER                     "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-24T16:25:48.231549",
+      "hour": 16,
+      "payload": {
+        "page": "product_insights"
+      }
+    },
+    {
+      "type": "product_view",
+      "timestamp": "2026-04-24T16:25:48.260987",
+      "hour": 16,
+      "payload": {
+        "item": "GRPTRAINER                     "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-27T15:57:19.399251",
+      "hour": 15,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-28T15:25:07.520366",
+      "hour": 15,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-28T15:27:00.991038",
+      "hour": 15,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-28T15:33:32.537251",
+      "hour": 15,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-28T15:33:43.585330",
+      "hour": 15,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-30T13:52:29.709623",
+      "hour": 13,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-30T13:52:39.373814",
+      "hour": 13,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-30T13:52:45.042694",
+      "hour": 13,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "decision_timing",
+      "timestamp": "2026-04-30T13:52:45.202913",
+      "hour": 13,
+      "payload": {
+        "context": "inventory_list_select",
+        "seconds": 15.636954545974731,
+        "item": "NPKKTS                         "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-04-30T13:52:45.455606",
+      "hour": 13,
+      "payload": {
+        "page": "product_insights"
+      }
+    },
+    {
+      "type": "product_view",
+      "timestamp": "2026-04-30T13:52:45.487170",
+      "hour": 13,
+      "payload": {
+        "item": "NPKKTS                         "
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-05-04T08:34:21.276122",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-05-04T08:34:31.746571",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-05-05T08:28:05.555066",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
+      }
+    },
+    {
+      "type": "page_view",
+      "timestamp": "2026-05-05T08:28:50.228835",
+      "hour": 8,
+      "payload": {
+        "page": "market_overview"
       }
     }
   ],
