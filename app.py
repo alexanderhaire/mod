@@ -58,7 +58,8 @@ from market_insights import (
     validate_price_history_quality,
     get_batch_price_history_for_optimization,
     get_futures_price_history,
-    merge_erp_and_futures_data
+    merge_erp_and_futures_data,
+    render_vendor_quotes_panel
 )
 from ml_engine import OnlineLinearRegressor, PortfolioOptimizer, Backtester
 from portfolio_manager import PortfolioManager
@@ -2639,6 +2640,9 @@ try:
                 category = details.get('category', 'default')
                 inventory = details.get('inventory_status', {})
                 price_hist = details.get('price_history', [])
+
+                # --- VENDOR QUOTES & RECEIPTS PANEL ---
+                render_vendor_quotes_panel(cursor, product_item)
                 
                 # Fetch External Data
                 with st.spinner("● LOADING MARKET CONTEXT..."):
