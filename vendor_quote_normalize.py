@@ -7,7 +7,9 @@ flag so the UI can prompt the user before treating it as comparable.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+from typing import Literal
 
 LB_PER_TON = 2000.0
 
@@ -20,7 +22,7 @@ _RAILCAR_ALIASES = {"railcar", "rail_car", "rc", "car"}
 @dataclass
 class NormalizedPrice:
     price_per_ton: float | None
-    confidence: str  # "high" | "low"
+    confidence: Literal["high", "low"]
     warnings: list[str] = field(default_factory=list)
 
 
@@ -34,7 +36,18 @@ def normalize_to_per_ton(
     Returns a ``NormalizedPrice`` whose ``price_per_ton`` is ``None`` when the
     conversion can't be done safely. Callers should preserve the raw quoted
     value separately and surface low-confidence rows for user confirmation.
+
+    Non-finite prices (NaN, ±inf — usually a sign the extractor returned
+    garbage) are downgraded to low confidence with ``price_not_finite`` and
+    ``price_per_ton=None`` so they can't poison the cheapest-current calc.
+    Negative prices ARE passed through — they're legitimate for credits.
     """
+    if not math.isfinite(price):
+        return NormalizedPrice(
+            price_per_ton=None,
+            confidence="low",
+            warnings=["price_not_finite"],
+        )
     u = (unit or "").strip().lower()
 
     if u in _TON_ALIASES:

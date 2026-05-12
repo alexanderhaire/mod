@@ -63,3 +63,25 @@ def test_short_ton_alias():
     result = normalize_to_per_ton(price=475.0, unit="short_ton")
     assert result.price_per_ton == 475.0
     assert result.confidence == "high"
+
+
+def test_gallon_zero_weight_is_low_confidence():
+    result = normalize_to_per_ton(price=4.20, unit="gallon", weight_per_gallon=0.0)
+    assert result.price_per_ton is None
+    assert result.confidence == "low"
+    assert "unit_requires_weight_per_gallon" in result.warnings
+
+
+def test_nan_price_downgraded_to_low_confidence():
+    import math
+    result = normalize_to_per_ton(price=math.nan, unit="ton")
+    assert result.price_per_ton is None
+    assert result.confidence == "low"
+    assert "price_not_finite" in result.warnings
+
+
+def test_negative_price_passes_through():
+    # Negatives can be legitimate credits/adjustments.
+    result = normalize_to_per_ton(price=-50.0, unit="ton")
+    assert result.price_per_ton == -50.0
+    assert result.confidence == "high"
