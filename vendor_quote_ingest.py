@@ -34,6 +34,10 @@ DOMAINS_PATH = DATA_DIR / "vendor_domains.json"
 ALIASES_PATH = DATA_DIR / "vendor_quote_aliases.json"
 
 
+class IngestConfigError(RuntimeError):
+    """Raised when required secrets (Graph or OpenAI) are missing or incomplete."""
+
+
 @dataclass
 class IngestSummary:
     seen: int = 0
@@ -89,12 +93,12 @@ def run_ingest(
     summary = IngestSummary()
     graph_settings = load_graph_settings()
     if not graph_settings:
-        LOGGER.error("Graph settings missing or incomplete in secrets.toml. Aborting.")
-        return summary
+        _append_abort_log("missing or incomplete [graph] section in secrets.toml")
+        raise IngestConfigError("Graph settings missing or incomplete in secrets.toml")
     openai_settings = load_openai_settings()
     if not openai_settings.get("api_key"):
-        LOGGER.error("OpenAI api_key missing. Aborting.")
-        return summary
+        _append_abort_log("missing OpenAI api_key in secrets.toml")
+        raise IngestConfigError("OpenAI api_key missing in secrets.toml")
 
     domains = load_vendor_domains(DOMAINS_PATH)
     aliases = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
@@ -182,6 +186,12 @@ def _append_log(summary: IngestSummary) -> None:
         f.write(line)
 
 
+def _append_abort_log(reason: str) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(f"{dt.datetime.utcnow().isoformat()}Z ABORT: {reason}\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest vendor quotes from Outlook via Graph.")
     parser.add_argument("--item", dest="item_filter", default=None,
@@ -203,6 +213,9 @@ def main() -> int:
             backfill_days=args.backfill_days,
             dry_run=args.dry_run,
         )
+    except IngestConfigError as exc:
+        LOGGER.error("config: %s", exc)
+        return 3
     except RuntimeError as exc:
         LOGGER.error("%s", exc)
         return 2
