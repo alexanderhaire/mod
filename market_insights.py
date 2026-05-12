@@ -2713,6 +2713,112 @@ def compute_cheapest_current_quote(
     return min(candidates, key=lambda q: q["price_per_ton"])
 
 
+def _render_vendor_price_timeline(
+    store: dict,
+    item_number: str,
+    receipts: list[dict],
+) -> None:
+    """Render an Altair chart of vendor prices over time.
+
+    Combines receipt (hard) prices from POP30300 with quote (soft) prices from
+    the vendor_quotes store. Both are shown in the item's base UOM (typically
+    $/lb for chemicals). Quotes stored as $/ton are converted by dividing by
+    2000 (short-ton lb count).
+    """
+    import streamlit as st
+    import pandas as pd
+
+    try:
+        import altair as alt
+    except ImportError:
+        return
+
+    LB_PER_TON = 2000.0
+
+    # --- Build receipt series ---
+    receipt_rows = []
+    for r in receipts:
+        cost = r.get("AvgCost")
+        vendor = (r.get("VendorName") or "").strip()
+        d = r.get("TransactionDate")
+        if cost is not None and vendor and d:
+            receipt_rows.append({
+                "Date": str(d)[:10],
+                "Price": float(cost),
+                "Vendor": vendor,
+                "Type": "Receipt (confirmed)",
+                "PO": r.get("PONumber", ""),
+            })
+
+    # --- Build quote series ---
+    all_quotes = store.get(item_number, [])
+    quote_rows = []
+    for q in all_quotes:
+        ppt = q.get("price_per_ton")
+        vendor = q.get("vendor", "")
+        d = q.get("quote_date")
+        if ppt is not None and vendor and d:
+            quote_rows.append({
+                "Date": d[:10],
+                "Price": float(ppt) / LB_PER_TON,
+                "Vendor": vendor,
+                "Type": "Quote (email)",
+                "PO": q.get("po_number") or "",
+            })
+
+    combined = receipt_rows + quote_rows
+    if not combined:
+        return
+
+    df = pd.DataFrame(combined)
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.dropna(subset=["Date"])
+    if df.empty:
+        return
+
+    st.markdown("#### Vendor Price Timeline")
+
+    base = alt.Chart(df).encode(
+        x=alt.X("Date:T", title="Date"),
+        y=alt.Y("Price:Q", title="Cost ($/base UOM)"),
+        color=alt.Color("Vendor:N", legend=alt.Legend(title="Vendor")),
+        shape=alt.Shape(
+            "Type:N",
+            legend=alt.Legend(title="Source"),
+            scale=alt.Scale(
+                domain=["Receipt (confirmed)", "Quote (email)"],
+                range=["circle", "diamond"],
+            ),
+        ),
+        tooltip=[
+            alt.Tooltip("Date:T", format="%Y-%m-%d"),
+            "Vendor:N",
+            alt.Tooltip("Price:Q", format="$.5f", title="$/unit"),
+            "Type:N",
+            "PO:N",
+        ],
+    ).mark_point(size=80, filled=True, opacity=0.85)
+
+    # Add a line connecting receipt points per vendor for trend visibility
+    receipt_df = df[df["Type"] == "Receipt (confirmed)"]
+    if not receipt_df.empty:
+        line = (
+            alt.Chart(receipt_df)
+            .mark_line(strokeDash=[4, 2], opacity=0.4)
+            .encode(
+                x="Date:T",
+                y="Price:Q",
+                color=alt.Color("Vendor:N", legend=None),
+            )
+        )
+        chart = line + base
+    else:
+        chart = base
+
+    st.altair_chart(chart.properties(height=350), use_container_width=True)
+    st.caption("Circles = confirmed receipts (POP30300)  ◆ Diamonds = email quotes (vendor_quotes.json)  •  Quotes converted from $/ton → $/base-UOM (÷2000)")
+
+
 def render_vendor_quotes_panel(cursor, item_number: str) -> None:
     """Render the Vendor Quotes & Receipts panel for one item.
 
@@ -2788,3 +2894,6 @@ def render_vendor_quotes_panel(cursor, item_number: str) -> None:
         })
     st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
     st.caption("● Fresh   ○ Stale (>60d)   ⚠ Low-confidence   = Quote fulfilled by paired PO")
+
+    # --- Vendor Price Timeline Chart ---
+    _render_vendor_price_timeline(store, item_number, receipts)
