@@ -7,6 +7,7 @@ manual setup.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 from pathlib import Path
 from typing import Any, Iterator
@@ -27,11 +28,9 @@ LOGGER = logging.getLogger("graph_mail_client")
 class GraphMailClient:
     def __init__(self, settings: dict[str, Any]):
         self._settings = settings
-        self._token: str | None = None
 
     def _acquire_token(self) -> str:
-        if self._token:
-            return self._token
+        """Get an access token. Delegates expiry handling to msal's internal cache."""
         cert_path = Path(self._settings["certificate_path"])
         cert_pem = cert_path.read_text(encoding="utf-8")
         app = msal.ConfidentialClientApplication(
@@ -45,8 +44,7 @@ class GraphMailClient:
         result = app.acquire_token_for_client(scopes=GRAPH_SCOPE_DEFAULT)
         if "access_token" not in result:
             raise RuntimeError(f"Graph auth failed: {result.get('error_description', result)}")
-        self._token = result["access_token"]
-        return self._token
+        return result["access_token"]
 
     def _get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         token = self._acquire_token()
@@ -64,19 +62,30 @@ class GraphMailClient:
         delta_link: str | None = None,
         backfill_days: int = 30,
     ) -> Iterator[tuple[dict[str, Any], str | None]]:
-        """Yield (message, next_delta_link) pairs.
+        """Yield ``(message, next_delta_link)`` pairs from the Inbox delta feed.
 
-        Only the LAST tuple's ``next_delta_link`` is meaningful (the persisted cursor).
-        Intermediate yields have ``next_delta_link = None``.
+        On the *initial* call (no ``delta_link``), the delta is seeded with a
+        ``receivedDateTime ge <now - backfill_days>`` filter so we capture the
+        recent history. Subsequent runs use the persisted ``delta_link`` and the
+        filter is sticky to the cursor — no need to re-pass it.
+
+        Yield semantics: every real message comes back as ``(msg, None)``. The
+        terminal yield, sent once Graph returns ``@odata.deltaLink``, is the
+        sentinel ``({}, delta_link)`` — an empty dict signals "this is the
+        cursor, not a message; persist the second element and stop iterating."
         """
         mailbox = self._settings["mailbox"]
         if delta_link:
             url = delta_link
             params = None
         else:
+            cutoff = (_dt.datetime.utcnow() - _dt.timedelta(days=backfill_days)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
             url = f"{GRAPH_API_BASE}/users/{mailbox}/mailFolders/Inbox/messages/delta"
             params = {
                 "$select": "id,subject,from,bodyPreview,body,receivedDateTime,internetMessageId",
+                "$filter": f"receivedDateTime ge {cutoff}",
             }
 
         while True:
@@ -93,9 +102,3 @@ class GraphMailClient:
                 yield {}, delta_link_out
                 return
             return
-
-    def fetch_message_body(self, message_id: str) -> str:
-        mailbox = self._settings["mailbox"]
-        data = self._get(f"{GRAPH_API_BASE}/users/{mailbox}/messages/{message_id}")
-        body = data.get("body", {})
-        return body.get("content", "") if isinstance(body, dict) else ""

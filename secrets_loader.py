@@ -130,7 +130,8 @@ def load_graph_settings() -> dict:
       tenant_id            - Azure tenant ID (GUID)
       client_id            - App registration client ID (GUID)
       certificate_path     - Absolute path to the X.509 cert (.pem with private key)
-      certificate_thumbprint - SHA-1 thumbprint of the cert, hex
+      certificate_thumbprint - SHA-1 thumbprint of the cert, hex (no
+                               separators — "ABCDEF0123..." not "AB:CD:EF:01...")
       mailbox              - UPN of the mailbox to poll
     """
     section = load_local_secret_section("graph")
