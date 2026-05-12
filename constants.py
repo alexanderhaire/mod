@@ -122,6 +122,13 @@ OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_DEFAULT_MODEL = OPENAI_BEST_MODEL
 OPENAI_EMBEDDING_MODEL = "text-embedding-ada-002"
 OPENAI_TIMEOUT_SECONDS = 50
+
+# --- Microsoft Graph ---
+GRAPH_AUTHORITY_TEMPLATE = "https://login.microsoftonline.com/{tenant_id}"
+GRAPH_SCOPE_DEFAULT = ["https://graph.microsoft.com/.default"]
+GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+GRAPH_TIMEOUT_SECONDS = 30
+
 DEFAULT_MODEL_CONTEXT_LIMIT = 128000
 MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "gpt-4.1": 128000,

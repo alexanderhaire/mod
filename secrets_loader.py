@@ -121,3 +121,21 @@ def build_connection_string(force_flags: dict[str, str | bool] | None = None) ->
         f"Trusted_Connection=yes;{extra_flags}"
     )
     return conn_str, server, database, "Windows auth"
+
+
+def load_graph_settings() -> dict:
+    """Load Microsoft Graph settings from the [graph] TOML section.
+
+    Expected keys:
+      tenant_id            - Azure tenant ID (GUID)
+      client_id            - App registration client ID (GUID)
+      certificate_path     - Absolute path to the X.509 cert (.pem with private key)
+      certificate_thumbprint - SHA-1 thumbprint of the cert, hex
+      mailbox              - UPN of the mailbox to poll
+    """
+    section = load_local_secret_section("graph")
+    required = {"tenant_id", "client_id", "certificate_path", "certificate_thumbprint", "mailbox"}
+    missing = required - set(section)
+    if missing:
+        return {}
+    return dict(section)
