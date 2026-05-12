@@ -2579,3 +2579,212 @@ def calculate_black_scholes_put(
     
     put_price = K * np.exp(-r * T) * norm_cdf(-d2) - S * norm_cdf(-d1)
     return float(put_price)
+
+
+# ---------------------------------------------------------------------------
+# Vendor Quotes & Receipts panel — pure helpers + Streamlit renderer
+# ---------------------------------------------------------------------------
+import datetime as _vq_dt
+from pathlib import Path as _vq_Path
+
+
+def _vq_parse_date(value) -> _vq_dt.date | None:
+    if not value:
+        return None
+    if isinstance(value, _vq_dt.date):
+        return value
+    s = str(value)[:10]
+    try:
+        return _vq_dt.date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def _vq_latest_receipt_per_vendor_mode(receipts: list[dict]) -> dict[tuple[str, str], dict]:
+    """Reduce raw receipt rows to one-per-(vendor, mode) by latest TransactionDate.
+
+    Mode defaults to "unknown" because POP30300 doesn't carry shipping mode.
+    """
+    out: dict[tuple[str, str], dict] = {}
+    for r in receipts:
+        vendor = (r.get("VendorName") or "").strip()
+        if not vendor:
+            continue
+        mode = r.get("Mode") or "unknown"
+        d = _vq_parse_date(r.get("TransactionDate"))
+        key = (vendor, mode)
+        existing = out.get(key)
+        if existing is None or (d and (_vq_parse_date(existing.get("TransactionDate")) or _vq_dt.date.min) < d):
+            out[key] = r
+    return out
+
+
+def join_quotes_to_receipts(quotes: list[dict], receipts: list[dict]) -> list[dict]:
+    """Build per-(vendor, mode) rows that pair the latest quote with the latest receipt.
+
+    A row is emitted for every (vendor, mode) appearing on either side. ``po_match``
+    is True when the quote's PO and the receipt's PO are identical and non-empty.
+    """
+    latest_q = {(q.get("vendor", ""), q.get("mode") or "unknown"): q for q in quotes}
+    latest_r = _vq_latest_receipt_per_vendor_mode(receipts)
+
+    # Quotes can be more granular on mode than receipts. If a quote has a vendor
+    # whose receipts only ever come back with mode="unknown", we treat the receipt
+    # as the partner for any mode of that vendor.
+    receipt_by_vendor: dict[str, dict] = {}
+    for (vendor, _mode), receipt in latest_r.items():
+        existing = receipt_by_vendor.get(vendor)
+        if existing is None or (
+            _vq_parse_date(receipt.get("TransactionDate")) or _vq_dt.date.min
+        ) > (_vq_parse_date(existing.get("TransactionDate")) or _vq_dt.date.min):
+            receipt_by_vendor[vendor] = receipt
+
+    rows: list[dict] = []
+    seen_keys: set[tuple[str, str]] = set()
+
+    for (vendor, mode), q in latest_q.items():
+        receipt = receipt_by_vendor.get(vendor)
+        q_price = q.get("price_per_ton")
+        r_price = float(receipt["AvgCost"]) if receipt and receipt.get("AvgCost") is not None else None
+        delta = None
+        if q_price is not None and r_price is not None:
+            delta = float(q_price) - r_price
+        po_match = bool(
+            q.get("po_number") and receipt and q.get("po_number") == receipt.get("PONUMBER")
+        )
+        rows.append({
+            "vendor": vendor,
+            "mode": mode,
+            "quote_date": q.get("quote_date"),
+            "quote_price_per_ton": q_price,
+            "quote_po": q.get("po_number"),
+            "receipt_date": receipt.get("TransactionDate") if receipt else None,
+            "receipt_price_per_ton": r_price,
+            "receipt_po": receipt.get("PONUMBER") if receipt else None,
+            "delta_per_ton": delta,
+            "po_match": po_match,
+            "confidence": q.get("confidence", "high"),
+        })
+        seen_keys.add((vendor, mode))
+
+    # Vendors with receipts but no quote
+    for vendor, receipt in receipt_by_vendor.items():
+        if any(v == vendor for v, _ in seen_keys):
+            continue
+        r_price = float(receipt["AvgCost"]) if receipt.get("AvgCost") is not None else None
+        rows.append({
+            "vendor": vendor,
+            "mode": receipt.get("Mode") or "unknown",
+            "quote_date": None,
+            "quote_price_per_ton": None,
+            "quote_po": None,
+            "receipt_date": receipt.get("TransactionDate"),
+            "receipt_price_per_ton": r_price,
+            "receipt_po": receipt.get("PONUMBER"),
+            "delta_per_ton": None,
+            "po_match": False,
+            "confidence": "high",
+        })
+    return rows
+
+
+def compute_cheapest_current_quote(
+    quotes: list[dict],
+    today: _vq_dt.date | None = None,
+    freshness_days: int = 60,
+) -> dict | None:
+    """Return the cheapest quote among rows that are fresh AND high confidence."""
+    today = today or _vq_dt.date.today()
+    candidates: list[dict] = []
+    for q in quotes:
+        if q.get("confidence") == "low":
+            continue
+        price = q.get("price_per_ton")
+        if price is None:
+            continue
+        d = _vq_parse_date(q.get("quote_date"))
+        if d is None:
+            continue
+        if (today - d).days > freshness_days:
+            continue
+        candidates.append(q)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda q: q["price_per_ton"])
+
+
+def render_vendor_quotes_panel(cursor, item_number: str) -> None:
+    """Render the Vendor Quotes & Receipts panel for one item.
+
+    Imports of streamlit/pandas are kept local so this module stays importable
+    in test contexts without those deps loaded eagerly.
+    """
+    import streamlit as st
+    import pandas as pd
+    from vendor_quote_store import load_quotes, latest_per_vendor_mode
+
+    store_path = _vq_Path(__file__).parent / "data" / "vendor_quotes.json"
+    store = load_quotes(store_path)
+    quotes_latest = latest_per_vendor_mode(store, item_number)
+    receipts = fetch_product_price_history(cursor, item_number, days=730)
+    rows = join_quotes_to_receipts(quotes_latest, receipts)
+
+    st.markdown("### Vendor Quotes & Receipts")
+    refresh_col, status_col = st.columns([1, 6])
+    with refresh_col:
+        clicked = st.button("↻ Refresh", key=f"vq_refresh_{item_number}")
+    if clicked:
+        with st.spinner("Pulling latest quotes from Outlook..."):
+            from vendor_quote_ingest import run_ingest
+            try:
+                summary = run_ingest(item_filter=item_number)
+                with status_col:
+                    st.caption(
+                        f"Refreshed: {summary.matched} matched, "
+                        f"{summary.extracted_rows} rows, "
+                        f"{summary.low_confidence} low-confidence."
+                    )
+            except RuntimeError as exc:
+                with status_col:
+                    st.warning(f"Already running: {exc}")
+        st.rerun()
+
+    cheapest = compute_cheapest_current_quote(quotes_latest)
+    if cheapest:
+        st.success(
+            f"★ Cheapest current quote (≤60d): {cheapest['vendor']} — "
+            f"${cheapest['price_per_ton']:.2f}/ton {cheapest.get('mode', '')} "
+            f"({cheapest.get('quote_date', '?')}, PO {cheapest.get('po_number') or '—'})"
+        )
+    else:
+        st.info("No fresh confirmed quotes in the last 60 days. Click Refresh to pull from Outlook.")
+
+    if not rows:
+        st.caption("No vendor history for this item yet.")
+        return
+
+    today = _vq_dt.date.today()
+    table_rows = []
+    for r in rows:
+        qd = _vq_parse_date(r.get("quote_date"))
+        fresh = bool(qd and (today - qd).days <= 60)
+        table_rows.append({
+            "Vendor": r["vendor"],
+            "Mode": r["mode"],
+            "Last Quote": (
+                f"${r['quote_price_per_ton']:.2f}/t  {r['quote_date'] or '?'}  #{r.get('quote_po') or '—'}"
+                if r["quote_price_per_ton"] is not None else "—"
+            ),
+            "Last Receipt": (
+                f"${r['receipt_price_per_ton']:.2f}/t  {str(r.get('receipt_date'))[:10] or '?'}  #{r.get('receipt_po') or '—'}"
+                if r["receipt_price_per_ton"] is not None else "—"
+            ),
+            "Δ": f"${r['delta_per_ton']:+.2f}" if r["delta_per_ton"] is not None else "—",
+            "Notes": (
+                ("⚠ " if r.get("confidence") == "low" else "")
+                + ("● " if fresh else "○ ")
+                + ("= " if r.get("po_match") else "")
+            ),
+        })
+    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+    st.caption("● Fresh   ○ Stale (>60d)   ⚠ Low-confidence   = Quote fulfilled by paired PO")
