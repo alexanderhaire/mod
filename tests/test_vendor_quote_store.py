@@ -18,6 +18,12 @@ def test_load_quotes_returns_empty_when_file_missing(tmp_path: Path):
     assert load_quotes(missing) == {}
 
 
+def test_load_quotes_raises_on_corrupt_json(store_path: Path):
+    store_path.write_text("not valid { json", encoding="utf-8")
+    with pytest.raises(json.JSONDecodeError):
+        load_quotes(store_path)
+
+
 def test_load_quotes_returns_dict_keyed_by_item(write_store):
     path = write_store({
         "NPKU32": [{"vendor": "HELM", "price_per_ton": 475.0}],

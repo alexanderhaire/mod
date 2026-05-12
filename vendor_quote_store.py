@@ -12,7 +12,12 @@ from typing import Any
 
 
 def load_quotes(path: Path) -> dict[str, list[dict[str, Any]]]:
-    """Return the full quote store. Empty dict if the file doesn't exist."""
+    """Return the full quote store. Empty dict if the file doesn't exist.
+
+    Raises ``json.JSONDecodeError`` if the file exists but is not valid JSON
+    (e.g., truncated by an interrupted write). Loud failure is intentional —
+    silent recovery would discard historical quotes.
+    """
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -23,18 +28,28 @@ def load_quotes(path: Path) -> dict[str, list[dict[str, Any]]]:
 
 
 def append_quote(path: Path, item_number: str, row: dict[str, Any]) -> None:
-    """Append a quote row under ``item_number``. Creates the file if missing."""
+    """Append a quote row under ``item_number``. Creates the file if missing.
+
+    Uses write-temp-then-rename so an interrupted write can't leave the store
+    truncated. ``os.replace`` is atomic on Windows since Python 3.3.
+    """
     store = load_quotes(path)
     store.setdefault(item_number, []).append(row)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(store, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(store, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
 
 
 def latest_per_vendor_mode(
     store: dict[str, list[dict[str, Any]]],
     item_number: str,
 ) -> list[dict[str, Any]]:
-    """Return at most one row per (vendor, mode) — the row with the newest ``quote_date``."""
+    """Return at most one row per (vendor, mode) — the row with the newest ``quote_date``.
+
+    Assumes ``quote_date`` values are ISO 8601 ``YYYY-MM-DD`` strings; the
+    comparison is lexicographic.
+    """
     rows = store.get(item_number, [])
     latest: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
