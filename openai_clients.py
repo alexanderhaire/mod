@@ -1035,3 +1035,47 @@ def call_openai_vision_analyst(
     except (requests.RequestException, KeyError, json.JSONDecodeError) as err:
         LOGGER.warning("OpenAI Vision failed: %s", err)
         return {"answer": "I had trouble seeing that image. " + str(err)}
+
+
+def call_openai_quote_extract(
+    messages: list[dict[str, str]],
+    api_key: str,
+    model: str,
+) -> str:
+    """Call OpenAI chat completions for vendor-quote extraction and return the content string.
+
+    Uses ``response_format={"type": "json_object"}`` because the extractor expects
+    strict JSON. Retries up to 3 times with exponential backoff on transient
+    errors (HTTP 429/5xx and network exceptions). Once the Outlook delta cursor
+    advances past a message, that message will not be re-pulled, so we have one
+    shot per cron run to extract its quote — hence the retries.
+    """
+    import time
+
+    transient_statuses = {429, 500, 502, 503, 504}
+    last_error: Exception | None = None
+    for attempt in range(3):
+        if attempt > 0:
+            time.sleep(2 ** (2 * attempt))  # 0s, 4s, 16s
+        try:
+            response = requests.post(
+                OPENAI_CHAT_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0.0,
+                },
+                timeout=OPENAI_TIMEOUT_SECONDS,
+            )
+            if response.status_code in transient_statuses and attempt < 2:
+                last_error = requests.HTTPError(f"transient {response.status_code}")
+                continue
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_error = exc
+            continue
+    raise last_error or RuntimeError("OpenAI quote-extract call failed without specific error")

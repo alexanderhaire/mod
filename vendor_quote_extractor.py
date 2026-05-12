@@ -14,8 +14,6 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-import requests
-
 LOGGER = logging.getLogger("vendor_quote_extractor")
 
 _SYSTEM_PROMPT = """You extract supplier price quotes from procurement emails.
@@ -41,7 +39,7 @@ Return ONLY a JSON object with this shape:
 Rules:
 - Map natural-language item references to ITEMNMBR using the alias map provided in the user message.
 - Return an empty quotes array if no clear price is stated.
-- Set confidence to "low" when unit is ambiguous (e.g., "per railcar"), date is missing, or the item isn't resolvable.
+- Set confidence to "low" when unit is ambiguous (e.g., "per railcar"), date is missing, or the vendor isn't resolvable.
 - Do not invent values. If unsure, use null.
 """
 
@@ -156,43 +154,14 @@ def parse_extraction_response(raw: str) -> list[ExtractedRow]:
 
 
 def _call_openai_chat(messages: list[dict[str, str]], model: str, api_key: str) -> str:
-    """Call OpenAI chat completions and return the assistant content string.
+    """Delegate to ``openai_clients.call_openai_quote_extract``.
 
-    Retries up to 3 times with exponential backoff on transient errors
-    (HTTP 429, 500, 502, 503, 504, or any network exception). Once the delta
-    cursor advances past a message, that message will not be re-pulled, so
-    we have one shot per cron run to extract its quote.
+    Kept as a thin wrapper in this module so the conftest ``stub_openai``
+    fixture can monkeypatch the call site without touching the shared
+    ``openai_clients`` module.
     """
-    import time
-    from constants import OPENAI_CHAT_URL, OPENAI_TIMEOUT_SECONDS
-
-    transient_statuses = {429, 500, 502, 503, 504}
-    last_error: Exception | None = None
-    for attempt in range(3):
-        if attempt > 0:
-            time.sleep(2 ** (2 * attempt))  # 0s, 4s, 16s
-        try:
-            response = requests.post(
-                OPENAI_CHAT_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0.0,
-                },
-                timeout=OPENAI_TIMEOUT_SECONDS,
-            )
-            if response.status_code in transient_statuses and attempt < 2:
-                last_error = requests.HTTPError(f"transient {response.status_code}")
-                continue
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        except (requests.ConnectionError, requests.Timeout) as exc:
-            last_error = exc
-            continue
-    raise last_error or RuntimeError("OpenAI call failed without specific error")
+    from openai_clients import call_openai_quote_extract
+    return call_openai_quote_extract(messages, api_key=api_key, model=model)
 
 
 def extract_quotes_from_email(
