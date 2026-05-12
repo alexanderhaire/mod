@@ -1,0 +1,7 @@
+{
+  "vendors": [
+    {"name": "HELM", "domains": ["helm.com", "helmagro.com", "helmag.com"]},
+    {"name": "Nutrien", "domains": ["nutrien.com"]},
+    {"name": "Trademark Nitrogen", "domains": ["trademarknitrogen.com"]}
+  ]
+}

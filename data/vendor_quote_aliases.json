@@ -1,0 +1,7 @@
+{
+  "NPKU32": ["U-32", "U32", "UAN 32", "UAN-32", "32% UAN", "urea ammonium nitrate 32", "urea ammonium nitrate solution 32"],
+  "NPKUREA": ["urea 46", "urea prill", "granular urea", "urea 46%"],
+  "NPKKCL62": ["potassium chloride 62", "potash 62", "MOP"],
+  "NPKKNO3": ["potassium nitrate 13-0-45", "KNO3", "NOP"],
+  "NPKPHOS75": ["phosphoric acid 75", "phosphoric acid 85", "phos acid"]
+}
