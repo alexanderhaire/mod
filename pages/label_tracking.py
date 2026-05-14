@@ -2,9 +2,38 @@ import streamlit as st
 import pandas as pd
 import pyodbc
 import io
+import json
 import altair as alt
 from datetime import date, timedelta
+from pathlib import Path
 from secrets_loader import build_connection_string
+
+COUNTS_PATH = Path(__file__).resolve().parent.parent / "data" / "label_onhand_counts.json"
+
+
+def _load_baseline():
+    """Load baseline label counts and date from JSON."""
+    if COUNTS_PATH.exists():
+        with open(COUNTS_PATH, "r") as f:
+            data = json.load(f)
+        baseline_date = data.get("baseline_date", str(date.today()))
+        counts = data.get("counts", [])
+        return baseline_date, pd.DataFrame(counts) if counts else pd.DataFrame()
+    return str(date.today()), pd.DataFrame()
+
+
+def _save_baseline(counts_df, baseline_dt=None):
+    """Save baseline label counts to JSON."""
+    if baseline_dt is None:
+        baseline_dt = str(date.today())
+    save_data = {
+        "description": "Physical on-hand label counts by format (Flat, Case, Jug).",
+        "updated": str(date.today()),
+        "baseline_date": baseline_dt,
+        "counts": counts_df.to_dict(orient="records"),
+    }
+    with open(COUNTS_PATH, "w") as f:
+        json.dump(save_data, f, indent=2)
 
 
 def render_page():
@@ -112,11 +141,32 @@ def render_page():
         ven_rows = cursor.fetchall()
         ven_cols = [d[0] for d in cursor.description]
         vendor_df = pd.DataFrame.from_records(ven_rows, columns=ven_cols)
-        # Keep only one vendor per item
         vendor_df = vendor_df.drop_duplicates(subset="Item", keep="first")
 
         conn.close()
         return inv_df, demand_df, po_df, fg_df, vendor_df
+
+    @st.cache_data(ttl=600, show_spinner=False)
+    def fetch_mo_consumption(baseline_dt):
+        """Labels consumed by manufacturing orders since baseline date."""
+        conn = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                LTRIM(RTRIM(p.ITEMNMBR)) AS Item,
+                SUM(p.QTYRECVD) AS Consumed
+            FROM MOP1016 p
+            JOIN IV00101 lbl ON RTRIM(p.ITEMNMBR) = lbl.ITEMNMBR
+                AND lbl.ITMCLSCD = 'CUSTLABEL'
+            WHERE p.DATERECD >= ?
+              AND p.DATERECD > '1900-01-01'
+              AND p.QTYRECVD > 0
+            GROUP BY p.ITEMNMBR
+        """, [baseline_dt])
+        rows = cursor.fetchall()
+        cols = [d[0] for d in cursor.description]
+        conn.close()
+        return pd.DataFrame.from_records(rows, columns=cols) if rows else pd.DataFrame(columns=["Item", "Consumed"])
 
     with st.spinner("Loading label data..."):
         inv_df, demand_df, po_df, fg_df, vendor_df = fetch_label_data(lookback)
@@ -134,7 +184,6 @@ def render_page():
     else:
         df["LabelsConsumed"] = 0.0
 
-    # Keep raw PO detail for display later
     po_detail_df = po_df.copy() if not po_df.empty else pd.DataFrame()
 
     if not po_df.empty:
@@ -162,6 +211,33 @@ def render_page():
     df["POQtyOpen"] = df["POQtyOpen"].fillna(0)
     df["LinkedFGs"] = df["LinkedFGs"].fillna("")
     df["Vendor"] = df["Vendor"].fillna("")
+
+    # --- Physical label counts (Flat / Case / Jug) + baseline ---
+    baseline_date, counts_df = _load_baseline()
+
+    if not counts_df.empty and "Item" in counts_df.columns:
+        counts_df = counts_df[["Item", "Flat", "Case", "Jug"]].drop_duplicates(subset="Item", keep="first")
+        df = df.merge(counts_df, on="Item", how="left")
+    else:
+        df["Flat"] = 0
+        df["Case"] = 0
+        df["Jug"] = 0
+
+    df["Flat"] = pd.to_numeric(df["Flat"], errors="coerce").fillna(0).astype(int)
+    df["Case"] = pd.to_numeric(df["Case"], errors="coerce").fillna(0).astype(int)
+    df["Jug"] = pd.to_numeric(df["Jug"], errors="coerce").fillna(0).astype(int)
+
+    # --- MO consumption since baseline ---
+    mo_df = fetch_mo_consumption(baseline_date)
+    if not mo_df.empty:
+        mo_df["Consumed"] = pd.to_numeric(mo_df["Consumed"], errors="coerce")
+        df = df.merge(mo_df, on="Item", how="left")
+    else:
+        df["Consumed"] = 0.0
+
+    df["Consumed"] = df["Consumed"].fillna(0).astype(int)
+    df["TotalBaseline"] = df["Flat"] + df["Case"] + df["Jug"]
+    df["Remaining"] = (df["TotalBaseline"] - df["Consumed"]).clip(lower=0).astype(int)
 
     # --- Calculations ---
     df["AvgDailyDemand"] = (df["LabelsConsumed"] / lookback).round(1)
@@ -224,44 +300,89 @@ def render_page():
     k3.metric("OK", ok)
     k4.metric("Total Labels", total)
 
+    # --- CSV Upload for Flat / Case / Jug counts ---
+    with st.expander("Upload Label Counts (CSV)"):
+        st.caption("Upload a CSV with columns: **Item**, **Flat**, **Case**, **Jug**. Item must match the Label Item number exactly.")
+        template = df[["Item", "Description"]].copy()
+        template["Flat"] = df["Flat"]
+        template["Case"] = df["Case"]
+        template["Jug"] = df["Jug"]
+        tmpl_csv = template.to_csv(index=False)
+        st.download_button("Download Template CSV", data=tmpl_csv, file_name="label_counts_template.csv", mime="text/csv")
+
+        uploaded = st.file_uploader("Upload CSV", type=["csv"], key="lbl_csv_upload")
+        if uploaded is not None:
+            try:
+                up_df = pd.read_csv(uploaded)
+                required = {"Item", "Flat", "Case", "Jug"}
+                if not required.issubset(set(up_df.columns)):
+                    st.error(f"CSV must have columns: {required}. Found: {set(up_df.columns)}")
+                else:
+                    up_df["Item"] = up_df["Item"].astype(str).str.strip()
+                    matched = up_df[up_df["Item"].isin(df["Item"])]
+                    unmatched = up_df[~up_df["Item"].isin(df["Item"])]
+                    st.write(f"**{len(matched)}** items matched, **{len(unmatched)}** unmatched")
+                    if not unmatched.empty:
+                        st.warning("Unmatched items (not in CUSTLABEL):")
+                        st.dataframe(unmatched[["Item"]].head(20), hide_index=True)
+                    if not matched.empty and st.button("Import Counts", type="primary", key="lbl_import"):
+                        save_rows = matched[["Item", "Flat", "Case", "Jug"]].copy()
+                        save_rows["Flat"] = pd.to_numeric(save_rows["Flat"], errors="coerce").fillna(0).astype(int)
+                        save_rows["Case"] = pd.to_numeric(save_rows["Case"], errors="coerce").fillna(0).astype(int)
+                        save_rows["Jug"] = pd.to_numeric(save_rows["Jug"], errors="coerce").fillna(0).astype(int)
+                        save_rows = save_rows[(save_rows["Flat"] > 0) | (save_rows["Case"] > 0) | (save_rows["Jug"] > 0)]
+                        _save_baseline(save_rows)
+                        st.success(f"Imported {len(save_rows)} label counts. Baseline set to today.")
+                        st.cache_data.clear()
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error reading CSV: {e}")
+
     # --- Main Table ---
     st.subheader("Label Reorder Recommendations")
+    st.caption(f"Baseline count date: **{baseline_date}**  |  Labels consumed by MOs since baseline are shown in the Consumed column.")
 
     display = df[[
-        "Item", "Description", "OnHand", "OnOrder", "POQtyOpen",
+        "Item", "Description", "Flat", "Case", "Jug", "Consumed", "Remaining",
+        "OnHand", "OnOrder", "POQtyOpen",
         "AvgDailyDemand", "DaysCoverage", "ReorderPoint",
         "SuggestedOrderQty", "MustOrderBy", "Urgency", "Vendor", "LinkedFGs"
-    ]].sort_values("DaysCoverage")
+    ]].sort_values("DaysCoverage").reset_index(drop=True)
 
-    def color_urgency(val):
-        if val == "Critical":
-            return "background-color: #ffcccc"
-        if val == "Soon":
-            return "background-color: #fff3cd"
-        if val == "OK":
-            return "background-color: #d4edda"
-        return ""
-
-    st.dataframe(
+    edited = st.data_editor(
         display,
         column_config={
-            "Item": "Label Item",
-            "Description": "Description",
-            "OnHand": st.column_config.NumberColumn("On Hand", format="%.0f"),
-            "OnOrder": st.column_config.NumberColumn("On Order (IV)", format="%.0f"),
-            "POQtyOpen": st.column_config.NumberColumn("Open PO Qty", format="%.0f"),
-            "AvgDailyDemand": st.column_config.NumberColumn("Daily Demand", format="%.1f"),
-            "DaysCoverage": st.column_config.NumberColumn("Days Coverage", format="%.0f"),
-            "ReorderPoint": st.column_config.NumberColumn("Reorder Point", format="%.0f"),
-            "SuggestedOrderQty": st.column_config.NumberColumn("Suggested Qty", format="%.0f"),
-            "MustOrderBy": st.column_config.DateColumn("Must Order By", format="YYYY-MM-DD"),
-            "Urgency": "Urgency",
-            "Vendor": "Vendor",
-            "LinkedFGs": "Linked Finished Goods",
+            "Item": st.column_config.TextColumn("Label Item", disabled=True),
+            "Description": st.column_config.TextColumn("Description", disabled=True),
+            "Flat": st.column_config.NumberColumn("Flat", format="%d", min_value=0),
+            "Case": st.column_config.NumberColumn("Case", format="%d", min_value=0),
+            "Jug": st.column_config.NumberColumn("Jug", format="%d", min_value=0),
+            "Consumed": st.column_config.NumberColumn("Consumed", format="%d", disabled=True),
+            "Remaining": st.column_config.NumberColumn("Remaining", format="%d", disabled=True),
+            "OnHand": st.column_config.NumberColumn("On Hand", format="%.0f", disabled=True),
+            "OnOrder": st.column_config.NumberColumn("On Order (IV)", format="%.0f", disabled=True),
+            "POQtyOpen": st.column_config.NumberColumn("Open PO Qty", format="%.0f", disabled=True),
+            "AvgDailyDemand": st.column_config.NumberColumn("Daily Demand", format="%.1f", disabled=True),
+            "DaysCoverage": st.column_config.NumberColumn("Days Coverage", format="%.0f", disabled=True),
+            "ReorderPoint": st.column_config.NumberColumn("Reorder Point", format="%.0f", disabled=True),
+            "SuggestedOrderQty": st.column_config.NumberColumn("Suggested Qty", format="%.0f", disabled=True),
+            "MustOrderBy": st.column_config.DateColumn("Must Order By", format="YYYY-MM-DD", disabled=True),
+            "Urgency": st.column_config.TextColumn("Urgency", disabled=True),
+            "Vendor": st.column_config.TextColumn("Vendor", disabled=True),
+            "LinkedFGs": st.column_config.TextColumn("Linked Finished Goods", disabled=True),
         },
         hide_index=True,
-        width='stretch',
+        use_container_width=True,
+        key="label_editor",
     )
+
+    # Save edited Flat/Case/Jug counts
+    if st.button("Save Label Counts", type="primary"):
+        save_rows = edited[["Item", "Flat", "Case", "Jug"]].copy()
+        save_rows = save_rows[(save_rows["Flat"] > 0) | (save_rows["Case"] > 0) | (save_rows["Jug"] > 0)]
+        _save_baseline(save_rows)
+        st.success(f"Saved {len(save_rows)} label counts. Baseline set to today.")
+        st.cache_data.clear()
 
     # --- Open POs ---
     if not po_detail_df.empty:

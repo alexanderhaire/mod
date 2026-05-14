@@ -175,6 +175,8 @@ try:
     st.sidebar.page_link("pages/delivery_cost_per_mile.py", label="🚚 Delivery Cost/Mile", icon="📊")
     st.sidebar.page_link("pages/label_tracking.py", label="🏷️ Label Tracking", icon="📊")
     st.sidebar.page_link("pages/southwest_report.py", label="🌱 Southwest Report", icon="📊")
+    st.sidebar.page_link("pages/item_sales_history.py", label="📊 Item Sales History", icon="📊")
+    st.sidebar.page_link("pages/poly_dcha_forecast.py", label="🧪 Poly/DCHA Forecast", icon="📊")
     st.sidebar.page_link("pages/sandbox.py", label="🧪 Sandbox", icon="🧪")
 except AttributeError:
     # Fallback for older Streamlit versions
