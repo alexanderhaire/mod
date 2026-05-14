@@ -61,10 +61,15 @@ from market_insights import (
     merge_erp_and_futures_data,
     render_vendor_quotes_panel
 )
-from ml_engine import OnlineLinearRegressor, PortfolioOptimizer, Backtester
-from portfolio_manager import PortfolioManager
-from auto_trader import AutoTrader
-from archive.quant_dashboard import render_quant_dashboard
+try:
+    from ml_engine import OnlineLinearRegressor, PortfolioOptimizer, Backtester
+    from portfolio_manager import PortfolioManager
+    from auto_trader import AutoTrader
+    from archive.quant_dashboard import render_quant_dashboard
+except ImportError:
+    OnlineLinearRegressor = PortfolioOptimizer = Backtester = None
+    PortfolioManager = AutoTrader = None
+    def render_quant_dashboard(): pass
 from ui_utils import (
     format_currency, render_kpi_card, render_trend_line, render_dataframe_with_selection,
     add_margin_metrics, render_pulse_header,
