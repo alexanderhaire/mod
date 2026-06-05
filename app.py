@@ -175,6 +175,7 @@ st.sidebar.divider()
 try:
     st.sidebar.page_link("pages/brain_center.py", label="🧠 Brain Center", icon="❤️")
     st.sidebar.page_link("pages/purchasing.py", label="🛒 Purchasing", icon="📊")
+    st.sidebar.page_link("pages/buy_plan.py", label="🛒 Buy Plan (Validated)", icon="✅")
     st.sidebar.page_link("pages/reorder_recommendations.py", label="📦 Reorder Recommendations", icon="📊")
     st.sidebar.page_link("pages/kanban_reorder.py", label="🔁 Kanban Reorder (Integrated)", icon="📊")
     st.sidebar.page_link("pages/delivery_cost_per_mile.py", label="🚚 Delivery Cost/Mile", icon="📊")
