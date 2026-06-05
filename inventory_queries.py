@@ -240,6 +240,7 @@ def fetch_mfg_bom_grouped_by_component(cursor: pyodbc.Cursor, parent_item: str) 
         LEFT JOIN IV00101 ip ON ip.ITEMNMBR = b.PPN_I
         LEFT JOIN IV00101 ic ON ic.ITEMNMBR = b.CPN_I
         WHERE b.PPN_I = ?
+          AND b.BOMCAT_I = 1 AND LEN(b.BOMNAME_I) = 0  -- active recipe only (exclude archived/named batch recipes)
         GROUP BY b.PPN_I, ip.ITEMDESC, b.CPN_I, ic.ITEMDESC
         ORDER BY b.CPN_I
     """
@@ -274,6 +275,7 @@ def fetch_recursive_bom_for_item(cursor: pyodbc.Cursor, parent_item: str) -> tup
                 CAST('|' + RTRIM(PPN_I) + '|' + RTRIM(CPN_I) + '|' AS VARCHAR(4000)) AS Path
             FROM BM010115
             WHERE PPN_I = ?
+              AND BOMCAT_I = 1 AND LEN(BOMNAME_I) = 0  -- active recipe only
 
             UNION ALL
 
@@ -288,12 +290,23 @@ def fetch_recursive_bom_for_item(cursor: pyodbc.Cursor, parent_item: str) -> tup
             INNER JOIN BOM_CTE cte ON b.PPN_I = cte.ComponentItem
             WHERE cte.Depth < 20
               AND cte.Path NOT LIKE '%|' + RTRIM(b.CPN_I) + '|%'
+              AND b.BOMCAT_I = 1 AND LEN(b.BOMNAME_I) = 0  -- active recipe only
+              -- treat raw materials as hard leaves: don't recurse into their REC-/dilution recipes
+              AND NOT EXISTS (
+                  SELECT 1 FROM IV00101 i
+                  WHERE RTRIM(i.ITEMNMBR) = RTRIM(cte.ComponentItem)
+                    AND i.ITMCLSCD LIKE 'RAWMAT%'
+              )
         )
         SELECT
             ComponentItem AS RawMaterial,
             SUM(Quantity) AS Design_Qty
         FROM BOM_CTE
-        WHERE ComponentItem NOT IN (SELECT DISTINCT PPN_I FROM BM010115)
+        -- a row is a leaf if it is a raw material (hard leaf) or it is not an active parent
+        WHERE ComponentItem IN (SELECT ITEMNMBR FROM IV00101 WHERE ITMCLSCD LIKE 'RAWMAT%')
+           OR ComponentItem NOT IN (
+                  SELECT DISTINCT PPN_I FROM BM010115 WHERE BOMCAT_I = 1 AND LEN(BOMNAME_I) = 0
+              )
         GROUP BY ComponentItem
         OPTION (MAXRECURSION 50)
     """
