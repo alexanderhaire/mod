@@ -3,5 +3,9 @@
   "NPKUREA": ["urea 46", "urea prill", "granular urea", "urea 46%"],
   "NPKKCL62": ["potassium chloride 62", "potash 62", "MOP"],
   "NPKKNO3": ["potassium nitrate 13-0-45", "KNO3", "NOP"],
-  "NPKPHOS75": ["phosphoric acid 75", "phosphoric acid 85", "phos acid"]
+  "NPKPHOS75": ["phosphoric acid 75", "phosphoric acid 85", "phos acid"],
+  "SO4FEDRY19": {
+    "aliases": ["ferrous sulfate", "iron sulfate", "iron sulphate", "ferrous sulphate", "FeSO4", "iron sulfate 19", "ferrous sulfate dry"],
+    "lbs_per_each": 2000
+  }
 }

@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-pd.set_option('future.no_silent_downcasting', True)
 import pyodbc
 import streamlit as st
 import streamlit.components.v1 as components
@@ -183,6 +182,7 @@ try:
     st.sidebar.page_link("pages/southwest_report.py", label="🌱 Southwest Report", icon="📊")
     st.sidebar.page_link("pages/item_sales_history.py", label="📊 Item Sales History", icon="📊")
     st.sidebar.page_link("pages/poly_dcha_forecast.py", label="🧪 Poly/DCHA Forecast", icon="📊")
+    st.sidebar.page_link("pages/standard_cost_changes.py", label="💸 Standard Cost Changes", icon="📊")
     st.sidebar.page_link("pages/sandbox.py", label="🧪 Sandbox", icon="🧪")
 except AttributeError:
     # Fallback for older Streamlit versions

@@ -26,7 +26,7 @@ Return ONLY a JSON object with this shape:
       "vendor": "<supplier name>",
       "quote_date": "<YYYY-MM-DD or null>",
       "price": <numeric>,
-      "unit": "<ton|lb|gallon|railcar|...>",
+      "unit": "<ton|lb|gallon|each|railcar|...>",
       "mode": "<rail_delivered|pickup|truck_delivered|null>",
       "po_number": "<PO# string or null>",
       "notes": "<short free-text>",

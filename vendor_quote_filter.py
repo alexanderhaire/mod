@@ -19,6 +19,7 @@ SUBJECT_PATTERNS = [
     re.compile(r"urea", re.IGNORECASE),
     re.compile(r"phos(?:phoric|phate)?", re.IGNORECASE),
     re.compile(r"potash", re.IGNORECASE),
+    re.compile(r"(?:ferrous|iron)\s*(?:sulfate|sulphate)", re.IGNORECASE),
 ]
 
 

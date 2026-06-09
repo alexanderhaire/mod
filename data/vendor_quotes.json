@@ -1,0 +1,19 @@
+{
+  "SO4FEDRY19": [
+    {
+      "vendor": "Pall Filtration & Separation Group",
+      "quote_date": "2026-05-12",
+      "price_per_ton": 76.67,
+      "raw_price": "$76.67/each",
+      "mode": "truck_delivered",
+      "po_number": null,
+      "notes": "Price change notification from Sharon Dessalet",
+      "source_message_id": null,
+      "source_subject": "Ferrous Sulfate price change",
+      "source_excerpt": "The price for the Ferrous Sulfate has changed to $76.67 each.",
+      "confidence": "high",
+      "warnings": [],
+      "ingested_at": "2026-05-14T00:00:00Z"
+    }
+  ]
+}

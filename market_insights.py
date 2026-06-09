@@ -2842,6 +2842,9 @@ def render_vendor_quotes_panel(cursor, item_number: str) -> None:
     if clicked:
         with st.spinner("Pulling latest quotes from Outlook..."):
             from vendor_quote_ingest import run_ingest
+            from secrets_loader import load_project_secrets
+            load_project_secrets.cache_clear()
+            _ingest_ok = False
             try:
                 summary = run_ingest(item_filter=item_number)
                 with status_col:
@@ -2850,10 +2853,12 @@ def render_vendor_quotes_panel(cursor, item_number: str) -> None:
                         f"{summary.extracted_rows} rows, "
                         f"{summary.low_confidence} low-confidence."
                     )
+                _ingest_ok = True
             except RuntimeError as exc:
                 with status_col:
-                    st.warning(f"Already running: {exc}")
-        st.rerun()
+                    st.error(f"Ingest failed: {exc}")
+        if _ingest_ok:
+            st.rerun()
 
     cheapest = compute_cheapest_current_quote(quotes_latest)
     if cheapest:

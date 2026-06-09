@@ -17,6 +17,7 @@ _TON_ALIASES = {"ton", "tons", "t", "short_ton", "shortton"}
 _LB_ALIASES = {"lb", "lbs", "pound", "pounds"}
 _GALLON_ALIASES = {"gallon", "gal", "gallons"}
 _RAILCAR_ALIASES = {"railcar", "rail_car", "rc", "car"}
+_EACH_ALIASES = {"each", "ea", "bag", "supersack", "pail", "drum", "unit"}
 
 
 @dataclass
@@ -30,6 +31,7 @@ def normalize_to_per_ton(
     price: float,
     unit: str,
     weight_per_gallon: float | None = None,
+    lbs_per_each: float | None = None,
 ) -> NormalizedPrice:
     """Convert ``price`` (numeric) in ``unit`` to $/ton.
 
@@ -67,6 +69,16 @@ def normalize_to_per_ton(
             price_per_ton=None,
             confidence="low",
             warnings=["unit_requires_weight_per_gallon"],
+        )
+
+    if u in _EACH_ALIASES:
+        if lbs_per_each and lbs_per_each > 0:
+            price_per_ton = float(price) / (lbs_per_each / LB_PER_TON)
+            return NormalizedPrice(price_per_ton=price_per_ton, confidence="high")
+        return NormalizedPrice(
+            price_per_ton=None,
+            confidence="low",
+            warnings=["unit_requires_lbs_per_each"],
         )
 
     if u in _RAILCAR_ALIASES:

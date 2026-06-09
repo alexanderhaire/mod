@@ -101,7 +101,19 @@ def run_ingest(
         raise IngestConfigError("OpenAI api_key missing in secrets.toml")
 
     domains = load_vendor_domains(DOMAINS_PATH)
-    aliases = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
+    raw_aliases = json.loads(ALIASES_PATH.read_text(encoding="utf-8"))
+    # Separate alias lists (for the extractor) from per-item metadata (for the normalizer).
+    # Entries can be plain lists (legacy) or dicts with an "aliases" key + metadata.
+    aliases: dict[str, list[str]] = {}
+    item_meta: dict[str, dict] = {}
+    for item, val in raw_aliases.items():
+        if isinstance(val, list):
+            aliases[item] = val
+        elif isinstance(val, dict):
+            aliases[item] = val.get("aliases", [])
+            item_meta[item] = {k: v for k, v in val.items() if k != "aliases"}
+        else:
+            aliases[item] = []
 
     with _lockfile(LOCK_PATH):
         client = GraphMailClient(graph_settings)
@@ -141,7 +153,12 @@ def run_ingest(
                 LOGGER.exception("Extractor crashed on msg id=%s", msg.get("id"))
                 continue
             for row in rows:
-                norm = normalize_to_per_ton(price=row.price or 0.0, unit=row.unit or "")
+                meta = item_meta.get(row.item_number or "", {})
+                norm = normalize_to_per_ton(
+                    price=row.price or 0.0,
+                    unit=row.unit or "",
+                    lbs_per_each=meta.get("lbs_per_each"),
+                )
                 warnings = list(norm.warnings)
                 confidence = "low" if (row.confidence == "low" or norm.confidence == "low") else "high"
                 if confidence == "low":
